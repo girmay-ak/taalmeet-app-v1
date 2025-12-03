@@ -1,0 +1,32 @@
+# TAALMEET Environment Variables
+# 
+# IMPORTANT: Create a .env file and copy these variables
+# Then fill in your actual Supabase credentials
+
+# ==========================================
+# SUPABASE CONFIGURATION
+# ==========================================
+# Get these from: https://supabase.com/dashboard/project/YOUR_PROJECT/settings/api
+
+EXPO_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+
+# ==========================================
+# OPTIONAL CONFIGURATIONS
+# ==========================================
+
+# Sentry (for error tracking)
+# SENTRY_DSN=your-sentry-dsn
+
+# Google Maps API Key (if needed)
+# EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your-google-maps-api-key
+
+# ==========================================
+# HOW TO SET UP:
+# ==========================================
+# 
+# 1. Create a new file named .env in the root directory
+# 2. Copy all the variables above
+# 3. Replace the placeholder values with your actual credentials
+# 4. Never commit the .env file to git (it's in .gitignore)
+
