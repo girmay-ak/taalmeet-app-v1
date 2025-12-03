@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import {
@@ -60,7 +61,7 @@ export default function AvailableScreen() {
   const userId = currentUser?.id;
 
   // Backend hooks
-  const { data: availability, isLoading, error } = useAvailability(userId);
+  const { data: availability, isLoading, error, refetch: refetchAvailability } = useAvailability(userId);
   const updateStatusMutation = useUpdateAvailabilityStatus();
   const updatePreferencesMutation = useUpdatePreferences();
   const addSlotMutation = useAddScheduleSlot();
@@ -75,11 +76,16 @@ export default function AvailableScreen() {
   const [newSlotEnd, setNewSlotEnd] = useState('20:00');
   const [newSlotRepeat, setNewSlotRepeat] = useState(true);
   
-  // Animated value for toggle thumb position
-  const toggleAnim = useRef(new Animated.Value(currentStatus === 'offline' ? 0 : 1)).current;
-
   // Extract data from availability
   const currentStatus = availability?.status || 'offline';
+  
+  // Debug: Log when showStatusBottomSheet changes
+  useEffect(() => {
+    console.log('showStatusBottomSheet state changed to:', showStatusBottomSheet);
+  }, [showStatusBottomSheet]);
+  
+  // Animated value for toggle thumb position - initialize after currentStatus is defined
+  const toggleAnim = useRef(new Animated.Value(currentStatus === 'offline' ? 0 : 1)).current;
   
   // Animate toggle when status changes
   useEffect(() => {
@@ -89,7 +95,7 @@ export default function AvailableScreen() {
       tension: 100,
       friction: 8,
     }).start();
-  }, [currentStatus]);
+  }, [currentStatus, toggleAnim]);
   const until = availability?.until || null;
   const preferences = availability?.preferences || {
     inPerson: false,
@@ -154,13 +160,16 @@ export default function AvailableScreen() {
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   // Handlers
-  const handleStatusToggle = async () => {
+  const handleStatusToggle = () => {
+    console.log('handleStatusToggle called. currentStatus:', currentStatus);
     if (currentStatus === 'offline') {
       // If offline, open bottom sheet to select status
+      console.log('Opening bottom sheet to set availability');
       setShowStatusBottomSheet(true);
     } else {
       // If online, turn off directly
-      await handleStatusChange('offline', 0, [], undefined);
+      console.log('Turning off availability');
+      handleStatusChange('offline', 0, [], undefined);
     }
   };
 
@@ -170,7 +179,12 @@ export default function AvailableScreen() {
     preferences: string[],
     location?: { latitude: number; longitude: number; address?: string }
   ) => {
-    if (!userId) return;
+    if (!userId) {
+      Alert.alert('Error', 'User ID not found. Please try again.');
+      return;
+    }
+
+    console.log('Updating availability status:', { newStatus, durationMinutes, preferences, location });
 
     let until: string | null = null;
     if (durationMinutes > 0 && newStatus !== 'offline') {
@@ -181,10 +195,12 @@ export default function AvailableScreen() {
 
     try {
       // Update status
-      await updateStatusMutation.mutateAsync({
+      console.log('Calling updateStatusMutation with:', { userId, status: newStatus, until });
+      const result = await updateStatusMutation.mutateAsync({
         userId,
         data: { status: newStatus, until },
       });
+      console.log('Status updated successfully:', result);
 
       // Update preferences if provided
       if (preferences.length > 0 || newStatus === 'offline') {
@@ -201,25 +217,55 @@ export default function AvailableScreen() {
         });
       }
 
-      // Update location if provided
-      if (location && (newStatus === 'available' || newStatus === 'soon')) {
+      // Update location when going online - always update so user appears on map
+      if ((newStatus === 'available' || newStatus === 'soon')) {
         try {
-          await updateLocationMutation.mutateAsync({
-            lat: location.latitude,
-            lng: location.longitude,
-          });
+          // Use provided location, or fallback to current user's profile location
+          let locationToUse = location;
+          
+          // If no location provided but user has location in profile, use that
+          if (!locationToUse && currentUser?.lat && currentUser?.lng) {
+            locationToUse = {
+              latitude: currentUser.lat,
+              longitude: currentUser.lng,
+            };
+          }
+          
+          // Update location if we have coordinates
+          if (locationToUse) {
+            await updateLocationMutation.mutateAsync({
+              lat: locationToUse.latitude,
+              lng: locationToUse.longitude,
+            });
+          }
         } catch (error) {
           console.warn('Failed to update location:', error);
           // Don't fail the whole operation if location update fails
         }
       }
 
+      // Close bottom sheet after successful save
       setShowStatusBottomSheet(false);
-      // Force refetch to update UI immediately
-      // The mutation already invalidates queries, but we can also manually refetch
-    } catch (error) {
-      // Error is handled by the hook
+      // Manually refetch to ensure UI updates immediately
+      await refetchAvailability();
+      // The mutation already invalidates queries, but manual refetch ensures immediate update
+      
+      // Redirect to map screen to see available users (only if going online)
+      if (newStatus === 'available' || newStatus === 'soon') {
+        // Small delay to ensure data is saved before navigating
+        setTimeout(() => {
+          router.push('/(tabs)/map');
+        }, 500);
+      }
+    } catch (error: any) {
+      // Show error alert to user
+      Alert.alert(
+        'Error',
+        error?.message || 'Failed to update availability. Please try again.',
+        [{ text: 'OK' }]
+      );
       console.error('Failed to update availability:', error);
+      // Don't close the bottom sheet on error so user can try again
     }
   };
 
@@ -388,10 +434,13 @@ export default function AvailableScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background.primary }]} edges={['top']}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
-        <View>
+        <View style={styles.headerLeft}>
           <Text style={[styles.headerTitle, { color: colors.text.primary }]}>Availability</Text>
           <Text style={[styles.headerSubtitle, { color: colors.text.muted }]}>Let others know when you're free to meet</Text>
         </View>
+        <TouchableOpacity onPress={() => {}}>
+          <Text style={[styles.saveButton, { color: colors.primary }]}>Save</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -415,7 +464,7 @@ export default function AvailableScreen() {
               </View>
             </View>
             <View style={styles.statusRight}>
-              {/* Custom Toggle Switch - Matching Figma Design */}
+              {/* Custom Toggle Switch - Matching Web Design */}
               <TouchableOpacity
                 onPress={handleStatusToggle}
                 disabled={updateStatusMutation.isPending}
@@ -440,7 +489,7 @@ export default function AvailableScreen() {
                           {
                             translateX: toggleAnim.interpolate({
                               inputRange: [0, 1],
-                              outputRange: [2, 28],
+                              outputRange: [4, 28], // Match web: translate-x-1 (4px) to translate-x-7 (28px)
                             }),
                           },
                         ],
@@ -710,6 +759,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
+    marginBottom: 4,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  saveButton: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   headerTitle: {
     fontSize: 24,
@@ -721,18 +778,21 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 80, // pb-20 = 80px
   },
   card: {
-    borderRadius: 16,
+    borderRadius: 16, // rounded-2xl
     borderWidth: 1,
-    padding: 16,
-    marginBottom: 16,
+    padding: 16, // p-4
+    marginBottom: 24, // mb-6 = 24px
   },
   statusHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: 12, // mb-3 = 12px
   },
   statusLeft: {
     flexDirection: 'row',
@@ -740,8 +800,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   statusIcon: {
-    width: 48,
-    height: 48,
+    width: 48, // w-12 = 48px
+    height: 48, // h-12 = 48px
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
@@ -749,7 +809,7 @@ const styles = StyleSheet.create({
   statusLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12, // gap-3 = 12px
   },
   statusDot: {
     width: 8,
@@ -766,29 +826,29 @@ const styles = StyleSheet.create({
   },
   statusRight: {
     alignItems: 'flex-end',
-    gap: 4,
+    gap: 4, // gap-1 = 4px
   },
   customToggle: {
-    width: 56,
-    height: 32,
+    width: 56, // w-14 = 56px
+    height: 32, // h-8 = 32px
     borderRadius: 16,
     justifyContent: 'center',
-    paddingHorizontal: 2,
+    paddingHorizontal: 0,
   },
   toggleThumb: {
-    width: 24,
-    height: 24,
+    width: 24, // w-6 = 24px
+    height: 24, // h-6 = 24px
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 2,
   },
   changeButton: {
-    paddingVertical: 2,
-    paddingHorizontal: 4,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
   },
   changeText: {
     fontSize: 12,
@@ -796,15 +856,15 @@ const styles = StyleSheet.create({
   },
   statusActions: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 16,
-    paddingTop: 16,
+    gap: 8, // gap-2 = 8px
+    marginTop: 0,
+    paddingTop: 12, // pt-3 = 12px
     borderTopWidth: 1,
   },
   extendButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: 8, // py-2 = 8px
+    borderRadius: 8, // rounded-lg
     alignItems: 'center',
   },
   extendButtonText: {
@@ -814,8 +874,8 @@ const styles = StyleSheet.create({
   },
   stopButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: 8, // py-2 = 8px
+    borderRadius: 8, // rounded-lg
     borderWidth: 1,
     alignItems: 'center',
   },
@@ -824,7 +884,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cardHeader: {
-    marginBottom: 16,
+    marginBottom: 16, // mb-4 = 16px
   },
   cardTitle: {
     fontSize: 16,
@@ -835,17 +895,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   scheduleList: {
-    gap: 12,
+    gap: 12, // space-y-3 = 12px
   },
   dayRow: {
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 12, // rounded-xl
+    padding: 12, // p-3
   },
   dayHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 8, // mb-2 = 8px
   },
   dayName: {
     fontSize: 14,
@@ -858,33 +918,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   slotsContainer: {
-    gap: 8,
+    gap: 8, // space-y-2 = 8px
   },
   slotRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
+    padding: 8, // p-2
+    borderRadius: 8, // rounded-lg
   },
   slotTime: {
     fontSize: 14,
   },
   preferencesGrid: {
-    gap: 8,
-    marginTop: 12,
+    gap: 8, // space-y-2 = 8px
+    marginTop: 12, // mt-3 = 12px (for Meeting Preferences) or mb-4 = 16px (for Notifications)
   },
   preferenceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
+    padding: 12, // p-3
+    borderRadius: 12, // rounded-xl
   },
   preferenceLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 12, // gap-3 = 12px
   },
   preferenceEmoji: {
     fontSize: 18,
@@ -896,9 +956,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    marginTop: 12,
+    padding: 12, // p-3
+    borderRadius: 12, // rounded-xl
+    marginTop: 16, // mt-4 = 16px
   },
   timezoneLabel: {
     fontSize: 14,
@@ -909,7 +969,8 @@ const styles = StyleSheet.create({
   },
   notifyMeText: {
     fontSize: 12,
-    marginTop: 4,
+    marginTop: 4, // mt-0.5 = 4px
+    marginBottom: 16, // mb-4 = 16px
   },
   infoCard: {
     flexDirection: 'row',

@@ -19,6 +19,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import * as Location from 'expo-location';
+import { LocationSearchModal } from './LocationSearchModal';
+import type { LocationResult } from '@/services/locationSearchService';
 
 // ============================================================================
 // TYPES
@@ -33,7 +35,7 @@ export interface AvailabilityBottomSheetProps {
     duration: number,
     preferences: string[],
     location?: { latitude: number; longitude: number; address?: string }
-  ) => void;
+  ) => Promise<void>;
 }
 
 interface StatusOption {
@@ -72,8 +74,12 @@ export function AvailabilityBottomSheet({
   const [selectedPreferences, setSelectedPreferences] = useState<string[]>(['in-person', 'video']);
   const [locationType, setLocationType] = useState<'current' | 'custom' | 'none'>('current');
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number; address?: string } | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<LocationResult | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
-  const slideAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
+  const [isSaving, setIsSaving] = useState(false);
+  const [showLocationSearch, setShowLocationSearch] = useState(false);
+  const screenHeight = Dimensions.get('window').height;
+  const slideAnim = useRef(new Animated.Value(screenHeight)).current;
 
   const statuses: StatusOption[] = [
     {
@@ -173,20 +179,36 @@ export function AvailabilityBottomSheet({
   // Animate bottom sheet
   useEffect(() => {
     if (isOpen) {
+      console.log('Bottom sheet opening, animating in');
+      // Reset animation value to start from bottom (off-screen)
+      slideAnim.setValue(screenHeight);
+      // Start animation immediately - slide up from bottom
       Animated.spring(slideAnim, {
         toValue: 0,
         useNativeDriver: true,
         tension: 65,
         friction: 11,
-      }).start();
+      }).start((finished) => {
+        if (finished) {
+          console.log('Animation completed successfully');
+        } else {
+          console.log('Animation was interrupted');
+        }
+      });
     } else {
+      // Slide down and hide
       Animated.timing(slideAnim, {
-        toValue: Dimensions.get('window').height,
+        toValue: screenHeight,
         duration: 250,
         useNativeDriver: true,
-      }).start();
+      }).start((finished) => {
+        if (finished) {
+          // Reset to bottom after animation completes
+          slideAnim.setValue(screenHeight);
+        }
+      });
     }
-  }, [isOpen, slideAnim]);
+  }, [isOpen, slideAnim, screenHeight]);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -198,9 +220,11 @@ export function AvailabilityBottomSheet({
       setSelectedPreferences(['in-person', 'video']);
       setLocationType('current');
       setCurrentLocation(null); // Reset location
+      setSelectedLocation(null); // Reset selected location
       // Get current location when opening
       handleGetCurrentLocation();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, currentStatus]);
 
   const togglePreference = (prefId: string) => {
@@ -211,11 +235,48 @@ export function AvailabilityBottomSheet({
     }
   };
 
-  const handleSave = () => {
-    const duration = durations.find((d) => d.id === selectedDuration)?.minutes || 60;
-    const location = locationType === 'current' && currentLocation ? currentLocation : undefined;
-    onStatusChange(selectedStatus, duration, selectedPreferences, location);
-    onClose();
+  const handleLocationSelect = (location: LocationResult) => {
+    setSelectedLocation(location);
+    setLocationType('custom');
+    setCurrentLocation({
+      latitude: location.latitude,
+      longitude: location.longitude,
+      address: location.address,
+    });
+  };
+
+  const handleSave = async () => {
+    // Don't allow saving if status is 'offline' - user should use the toggle for that
+    if (selectedStatus === 'offline') {
+      onClose();
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      const duration = durations.find((d) => d.id === selectedDuration)?.minutes || 60;
+      let location: { latitude: number; longitude: number; address?: string } | undefined;
+      
+      if (locationType === 'current' && currentLocation) {
+        location = currentLocation;
+      } else if (locationType === 'custom' && selectedLocation) {
+        location = {
+          latitude: selectedLocation.latitude,
+          longitude: selectedLocation.longitude,
+          address: selectedLocation.address,
+        };
+      }
+      
+      // Call the status change handler - it's async
+      await onStatusChange(selectedStatus, duration, selectedPreferences, location);
+      // The parent will close the sheet after successful save
+      // Reset saving state in case parent doesn't close immediately
+      setIsSaving(false);
+    } catch (error) {
+      console.error('Error saving availability:', error);
+      setIsSaving(false);
+      // Don't close on error - let user try again
+    }
   };
 
   const getStatusColor = (statusId: string) => {
@@ -223,14 +284,18 @@ export function AvailabilityBottomSheet({
     return status?.color || colors.primary;
   };
 
-  if (!isOpen) return null;
-
+  // Always render Modal but control visibility
+  console.log('AvailabilityBottomSheet render - isOpen:', isOpen);
+  
   return (
     <Modal
       visible={isOpen}
       transparent
       animationType="none"
       onRequestClose={onClose}
+      statusBarTranslucent
+      onShow={() => console.log('Modal onShow called')}
+      presentationStyle="overFullScreen"
     >
       <View style={styles.modalContainer}>
         {/* Backdrop */}
@@ -258,8 +323,10 @@ export function AvailabilityBottomSheet({
 
             <ScrollView
               style={styles.content}
-              showsVerticalScrollIndicator={false}
-              bounces={false}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={true}
+              bounces={true}
+              nestedScrollEnabled={true}
             >
               {/* Header */}
               <View style={styles.header}>
@@ -416,9 +483,9 @@ export function AvailabilityBottomSheet({
                       )}
                     </TouchableOpacity>
 
-                    {/* Choose Location */}
+                    {/* Search Location */}
                     <TouchableOpacity
-                      onPress={() => setLocationType('custom')}
+                      onPress={() => setShowLocationSearch(true)}
                       style={[
                         styles.locationOption,
                         {
@@ -433,16 +500,16 @@ export function AvailabilityBottomSheet({
                       ]}
                     >
                       <Ionicons
-                        name="map-outline"
+                        name="search"
                         size={20}
                         color={locationType === 'custom' ? colors.primary : colors.text.muted}
                       />
                       <View style={styles.locationTextContainer}>
                         <Text style={[styles.locationTitle, { color: colors.text.primary }]}>
-                          Choose location
+                          Search for location
                         </Text>
-                        <Text style={[styles.locationSubtitle, { color: colors.text.muted }]}>
-                          Select on map
+                        <Text style={[styles.locationSubtitle, { color: colors.text.muted }]} numberOfLines={1}>
+                          {selectedLocation ? selectedLocation.name : 'Cafes, places, addresses...'}
                         </Text>
                       </View>
                       {locationType === 'custom' && (
@@ -532,10 +599,18 @@ export function AvailabilityBottomSheet({
               {/* Action Buttons */}
               <View style={styles.actionsContainer}>
                 <TouchableOpacity
-                  style={[styles.saveButton, { backgroundColor: colors.primary }]}
+                  style={[
+                    styles.saveButton,
+                    { backgroundColor: colors.primary },
+                    isSaving && styles.saveButtonDisabled,
+                  ]}
                   onPress={handleSave}
+                  activeOpacity={0.8}
+                  disabled={isSaving}
                 >
-                  <Text style={styles.saveButtonText}>Set Availability</Text>
+                  <Text style={styles.saveButtonText}>
+                    {isSaving ? 'Saving...' : 'Set Availability'}
+                  </Text>
                 </TouchableOpacity>
 
                 <View style={styles.cancelRow}>
@@ -554,6 +629,14 @@ export function AvailabilityBottomSheet({
           </SafeAreaView>
         </Animated.View>
       </View>
+
+      {/* Location Search Modal */}
+      <LocationSearchModal
+        isOpen={showLocationSearch}
+        onClose={() => setShowLocationSearch(false)}
+        onSelectLocation={handleLocationSelect}
+        currentLocation={currentLocation}
+      />
     </Modal>
   );
 }
@@ -566,6 +649,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     justifyContent: 'flex-end',
+    backgroundColor: 'transparent',
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -575,9 +659,16 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '85%',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    minHeight: 200,
+    width: '100%',
   },
   safeArea: {
-    flex: 1,
+    height: '100%',
+    maxHeight: '100%',
   },
   handleContainer: {
     alignItems: 'center',
@@ -589,8 +680,13 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 20,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+    paddingTop: 8,
+    flexGrow: 1,
   },
   header: {
     flexDirection: 'row',
@@ -715,6 +811,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 12,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
   saveButtonText: {
     color: '#FFFFFF',
