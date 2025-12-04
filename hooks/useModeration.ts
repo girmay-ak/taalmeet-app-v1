@@ -21,6 +21,7 @@ export const moderationKeys = {
     [...moderationKeys.all, 'actions', userId, actionType] as const,
   isAdmin: (userId: string) => [...moderationKeys.all, 'isAdmin', userId] as const,
   isBanned: (userId: string) => [...moderationKeys.all, 'isBanned', userId] as const,
+  statistics: () => [...moderationKeys.all, 'statistics'] as const,
 };
 
 // ============================================================================
@@ -93,6 +94,21 @@ export function useUserActions(userId?: string, actionType?: string) {
     queryFn: () => moderationService.getAllUserActions(userId, actionType as any),
     enabled: !!user && isAdminUser === true,
     staleTime: 1 * 60 * 1000,
+  });
+}
+
+/**
+ * Get admin statistics (admin only)
+ */
+export function useAdminStatistics() {
+  const { user } = useAuth();
+  const { data: isAdminUser } = useIsAdmin(user?.id);
+
+  return useQuery({
+    queryKey: moderationKeys.statistics(),
+    queryFn: () => moderationService.getAdminStatistics(),
+    enabled: !!user && isAdminUser === true,
+    staleTime: 30 * 1000, // 30 seconds
   });
 }
 

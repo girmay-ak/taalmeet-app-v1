@@ -395,3 +395,140 @@ export function validateMessageContent(text: string): {
   return { isValid: true };
 }
 
+// ============================================================================
+// ADMIN STATISTICS
+// ============================================================================
+
+export interface AdminStatistics {
+  totalUsers: number;
+  activeUsers: number; // Online in last 24 hours
+  totalReports: number;
+  pendingReports: number;
+  totalActions: number;
+  activeBans: number;
+  activeSuspensions: number;
+  totalConnections: number;
+  totalConversations: number;
+  totalMessages: number;
+}
+
+/**
+ * Get admin statistics dashboard
+ */
+export async function getAdminStatistics(): Promise<AdminStatistics> {
+  // Get total users count
+  const { count: totalUsers, error: usersError } = await supabase
+    .from('profiles')
+    .select('*', { count: 'exact', head: true });
+
+  if (usersError) {
+    throw parseSupabaseError(usersError);
+  }
+
+  // Get active users (online in last 24 hours)
+  const yesterday = new Date();
+  yesterday.setHours(yesterday.getHours() - 24);
+  
+  const { count: activeUsers, error: activeError } = await supabase
+    .from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .gte('last_active_at', yesterday.toISOString());
+
+  if (activeError) {
+    throw parseSupabaseError(activeError);
+  }
+
+  // Get total reports count
+  const { count: totalReports, error: reportsError } = await supabase
+    .from('reports')
+    .select('*', { count: 'exact', head: true });
+
+  if (reportsError) {
+    throw parseSupabaseError(reportsError);
+  }
+
+  // Get pending reports count
+  const { count: pendingReports, error: pendingError } = await supabase
+    .from('reports')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'pending');
+
+  if (pendingError) {
+    throw parseSupabaseError(pendingError);
+  }
+
+  // Get total actions count
+  const { count: totalActions, error: actionsError } = await supabase
+    .from('user_actions')
+    .select('*', { count: 'exact', head: true });
+
+  if (actionsError) {
+    throw parseSupabaseError(actionsError);
+  }
+
+  // Get active bans count
+  const { count: activeBans, error: bansError } = await supabase
+    .from('user_actions')
+    .select('*', { count: 'exact', head: true })
+    .eq('action_type', 'ban')
+    .eq('is_active', true)
+    .or('expires_at.is.null,expires_at.gt.' + new Date().toISOString());
+
+  if (bansError) {
+    throw parseSupabaseError(bansError);
+  }
+
+  // Get active suspensions count
+  const { count: activeSuspensions, error: suspensionsError } = await supabase
+    .from('user_actions')
+    .select('*', { count: 'exact', head: true })
+    .eq('action_type', 'suspension')
+    .eq('is_active', true)
+    .gt('expires_at', new Date().toISOString());
+
+  if (suspensionsError) {
+    throw parseSupabaseError(suspensionsError);
+  }
+
+  // Get total connections count
+  const { count: totalConnections, error: connectionsError } = await supabase
+    .from('connections')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'accepted');
+
+  if (connectionsError) {
+    throw parseSupabaseError(connectionsError);
+  }
+
+  // Get total conversations count
+  const { count: totalConversations, error: conversationsError } = await supabase
+    .from('conversations')
+    .select('*', { count: 'exact', head: true });
+
+  if (conversationsError) {
+    throw parseSupabaseError(conversationsError);
+  }
+
+  // Get total messages count
+  const { count: totalMessages, error: messagesError } = await supabase
+    .from('messages')
+    .select('*', { count: 'exact', head: true });
+
+  if (messagesError) {
+    throw parseSupabaseError(messagesError);
+  }
+
+  return {
+    totalUsers: totalUsers || 0,
+    activeUsers: activeUsers || 0,
+    totalReports: totalReports || 0,
+    pendingReports: pendingReports || 0,
+    totalActions: totalActions || 0,
+    activeBans: activeBans || 0,
+    activeSuspensions: activeSuspensions || 0,
+    totalConnections: totalConnections || 0,
+    totalConversations: totalConversations || 0,
+    totalMessages: totalMessages || 0,
+  };
+}
+
