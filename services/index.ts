@@ -44,3 +44,6 @@ export * from './dataExportService';
 
 // Moderation Service (Admin)
 export * from './moderationService';
+
+// Gamification Service
+export * from './gamificationService';

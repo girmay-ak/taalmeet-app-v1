@@ -44,3 +44,6 @@ export * from './useDataExport';
 
 // Moderation Hooks (Admin)
 export * from './useModeration';
+
+// Gamification Hooks
+export * from './useGamification';
