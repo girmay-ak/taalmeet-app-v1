@@ -21,6 +21,7 @@ import { getBlockedUserIds } from './safetyService';
 import { ENABLE_LOGGING } from '@/lib/config';
 import { validateMessageContent } from './moderationService';
 import * as gamificationService from './gamificationService';
+import * as notificationService from './notificationsService';
 
 // ============================================================================
 // TYPES
@@ -384,6 +385,41 @@ export async function sendMessage(
     // Don't fail message sending if points fail
     if (ENABLE_LOGGING) {
       console.warn('[messagesService] Failed to award points for message:', error);
+    }
+  }
+
+  // Send push notification to recipient
+  try {
+    // Get conversation participants to find recipient
+    const { data: participants } = await supabase
+      .from('conversation_participants')
+      .select('user_id')
+      .eq('conversation_id', conversationId);
+
+    if (participants) {
+      const recipientId = participants.find(p => p.user_id !== senderId)?.user_id;
+      if (recipientId) {
+        // Get sender's name for notification
+        const { data: senderProfile } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', senderId)
+          .single();
+
+        if (senderProfile) {
+          await notificationService.sendNewMessageNotification(
+            recipientId,
+            senderProfile.display_name,
+            text.trim(),
+            conversationId
+          );
+        }
+      }
+    }
+  } catch (error) {
+    // Don't fail message sending if notification fails
+    if (ENABLE_LOGGING) {
+      console.warn('[messagesService] Failed to send push notification:', error);
     }
   }
 

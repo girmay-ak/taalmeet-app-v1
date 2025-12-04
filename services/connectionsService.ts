@@ -13,6 +13,7 @@ import {
 import type { Connection, ConnectionInsert, ConnectionUpdate, Profile, UserLanguage } from '@/types/database';
 import { excludeBlockedUsers } from './safetyService';
 import * as gamificationService from './gamificationService';
+import * as notificationService from './notificationsService';
 
 // ============================================================================
 // TYPES
@@ -318,6 +319,27 @@ export async function sendConnectionRequest(
     throw parseSupabaseError(error);
   }
 
+  // Send push notification to target user
+  try {
+    // Get requester's name for notification
+    const { data: requesterProfile } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', currentUserId)
+      .single();
+
+    if (requesterProfile) {
+      await notificationService.sendConnectionRequestNotification(
+        targetUserId,
+        requesterProfile.display_name,
+        data.id
+      );
+    }
+  } catch (error) {
+    // Don't fail connection request if notification fails
+    console.warn('Failed to send push notification:', error);
+  }
+
   return data;
 }
 
@@ -351,6 +373,53 @@ export async function acceptRequest(connectionId: string, userId: string): Promi
   } catch (error) {
     // Don't fail connection acceptance if points fail
     console.warn('Failed to award points for connection:', error);
+  }
+
+  // Send push notifications
+  try {
+    // Get connection details to find both users
+    const connection = data;
+    const requesterId = connection.user_id;
+    const accepterId = connection.partner_id;
+
+    // Get accepter's name for requester's notification
+    const { data: accepterProfile } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', userId)
+      .single();
+
+    if (accepterProfile) {
+      // Notify the requester that their request was accepted
+      await notificationService.sendConnectionAcceptedNotification(
+        requesterId,
+        accepterProfile.display_name,
+        connectionId
+      );
+
+      // Also send match found notification to both users
+      const { data: requesterProfile } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', requesterId)
+        .single();
+
+      if (requesterProfile) {
+        await notificationService.sendMatchFoundNotification(
+          userId,
+          requesterProfile.display_name,
+          connectionId
+        );
+        await notificationService.sendMatchFoundNotification(
+          requesterId,
+          accepterProfile.display_name,
+          connectionId
+        );
+      }
+    }
+  } catch (error) {
+    // Don't fail connection acceptance if notifications fail
+    console.warn('Failed to send push notifications:', error);
   }
 
   return data;

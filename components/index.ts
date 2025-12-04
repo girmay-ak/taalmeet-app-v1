@@ -61,6 +61,9 @@ export { ReportUserModal } from './modals/ReportUserModal';
 export { DeleteAccountModal } from './modals/DeleteAccountModal';
 export { ActionModal } from './modals/ActionModal';
 
+// Notifications
+export { PushNotificationsSetup } from './notifications/PushNotificationsSetup';
+
 // Icons
 export * from './icons';
 

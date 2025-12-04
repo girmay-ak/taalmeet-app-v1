@@ -86,6 +86,16 @@ export interface Database {
         Insert: UserActionInsert;
         Update: UserActionUpdate;
       };
+      device_tokens: {
+        Row: DeviceToken;
+        Insert: DeviceTokenInsert;
+        Update: DeviceTokenUpdate;
+      };
+      notification_preferences: {
+        Row: NotificationPreferences;
+        Insert: NotificationPreferencesInsert;
+        Update: NotificationPreferencesUpdate;
+      };
     };
   };
 }
@@ -610,5 +620,94 @@ export interface UserActionUpdate {
   is_active?: boolean;
   resolved_at?: string | null;
   resolved_by?: string | null;
+}
+
+// ============================================================================
+// DEVICE_TOKENS TABLE
+// ============================================================================
+
+export interface DeviceToken {
+  id: string;
+  user_id: string;
+  token: string;
+  device_id: string | null;
+  platform: 'ios' | 'android' | 'web';
+  app_version: string | null;
+  device_info: Record<string, any> | null;
+  is_active: boolean;
+  last_used_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DeviceTokenInsert {
+  user_id: string;
+  token: string;
+  device_id?: string | null;
+  platform: 'ios' | 'android' | 'web';
+  app_version?: string | null;
+  device_info?: Record<string, any> | null;
+}
+
+export interface DeviceTokenUpdate {
+  is_active?: boolean;
+  last_used_at?: string;
+}
+
+// ============================================================================
+// NOTIFICATION_PREFERENCES TABLE
+// ============================================================================
+
+export interface NotificationPreferences {
+  id: string;
+  user_id: string;
+  push_enabled: boolean;
+  new_message_enabled: boolean;
+  connection_request_enabled: boolean;
+  connection_accepted_enabled: boolean;
+  match_found_enabled: boolean;
+  session_reminder_enabled: boolean;
+  session_starting_soon_enabled: boolean;
+  achievement_unlocked_enabled: boolean;
+  weekly_summary_enabled: boolean;
+  marketing_enabled: boolean;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  timezone: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationPreferencesInsert {
+  user_id: string;
+  push_enabled?: boolean;
+  new_message_enabled?: boolean;
+  connection_request_enabled?: boolean;
+  connection_accepted_enabled?: boolean;
+  match_found_enabled?: boolean;
+  session_reminder_enabled?: boolean;
+  session_starting_soon_enabled?: boolean;
+  achievement_unlocked_enabled?: boolean;
+  weekly_summary_enabled?: boolean;
+  marketing_enabled?: boolean;
+  quiet_hours_start?: string | null;
+  quiet_hours_end?: string | null;
+  timezone?: string;
+}
+
+export interface NotificationPreferencesUpdate {
+  push_enabled?: boolean;
+  new_message_enabled?: boolean;
+  connection_request_enabled?: boolean;
+  connection_accepted_enabled?: boolean;
+  match_found_enabled?: boolean;
+  session_reminder_enabled?: boolean;
+  session_starting_soon_enabled?: boolean;
+  achievement_unlocked_enabled?: boolean;
+  weekly_summary_enabled?: boolean;
+  marketing_enabled?: boolean;
+  quiet_hours_start?: string | null;
+  quiet_hours_end?: string | null;
+  timezone?: string;
 }
 

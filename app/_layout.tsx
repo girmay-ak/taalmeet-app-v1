@@ -7,6 +7,7 @@ import { AuthProvider } from '@/providers/AuthProvider';
 import { MatchFoundProvider } from '@/providers/MatchFoundProvider';
 import { GlobalMatchFoundPopup } from '@/components/matches/GlobalMatchFoundPopup';
 import { useColorScheme } from 'react-native';
+import { PushNotificationsSetup } from '@/components/notifications/PushNotificationsSetup';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -17,6 +18,7 @@ export default function RootLayout() {
         <MatchFoundProvider>
           <ThemeProvider>
             <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+            <PushNotificationsSetup />
             <Slot />
             <GlobalMatchFoundPopup />
           </ThemeProvider>

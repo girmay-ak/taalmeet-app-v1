@@ -17,14 +17,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import { useIsAdmin } from '@/hooks/useModeration';
 import { useAuth } from '@/providers';
+import {
+  useNotificationPreferences,
+  useUpdateNotificationPreferences,
+} from '@/hooks/useNotifications';
 
 export default function SettingsScreen() {
   const { colors, mode, toggleMode, theme, setTheme } = useTheme();
   const { user } = useAuth();
   const { data: isAdminUser } = useIsAdmin(user?.id);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [messageNotifications, setMessageNotifications] = useState(true);
-  const [matchNotifications, setMatchNotifications] = useState(true);
+  const { data: notificationPrefs } = useNotificationPreferences(user?.id);
+  const updatePreferencesMutation = useUpdateNotificationPreferences();
   const [soundEffects, setSoundEffects] = useState(true);
 
   const SettingRow = ({
@@ -95,8 +98,12 @@ export default function SettingsScreen() {
               iconColor={colors.primary}
               title="Push Notifications"
               subtitle="Receive app notifications"
-              value={pushNotifications}
-              onToggle={() => setPushNotifications(!pushNotifications)}
+              value={notificationPrefs?.push_enabled ?? true}
+              onToggle={() => {
+                updatePreferencesMutation.mutate({
+                  push_enabled: !(notificationPrefs?.push_enabled ?? true),
+                });
+              }}
             />
             <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
             <SettingRow
@@ -104,17 +111,51 @@ export default function SettingsScreen() {
               iconColor="#5FB3B3"
               title="New Messages"
               subtitle="Get notified of new messages"
-              value={messageNotifications}
-              onToggle={() => setMessageNotifications(!messageNotifications)}
+              value={notificationPrefs?.new_message_enabled ?? true}
+              onToggle={() => {
+                updatePreferencesMutation.mutate({
+                  new_message_enabled: !(notificationPrefs?.new_message_enabled ?? true),
+                });
+              }}
             />
             <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
             <SettingRow
               icon="heart"
               iconColor="#E91E8C"
-              title="New Matches"
-              subtitle="Get notified of new matches"
-              value={matchNotifications}
-              onToggle={() => setMatchNotifications(!matchNotifications)}
+              title="Connection Requests"
+              subtitle="Get notified of connection requests"
+              value={notificationPrefs?.connection_request_enabled ?? true}
+              onToggle={() => {
+                updatePreferencesMutation.mutate({
+                  connection_request_enabled: !(notificationPrefs?.connection_request_enabled ?? true),
+                });
+              }}
+            />
+            <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
+            <SettingRow
+              icon="people"
+              iconColor={colors.primary}
+              title="Connection Accepted"
+              subtitle="Get notified when connections are accepted"
+              value={notificationPrefs?.connection_accepted_enabled ?? true}
+              onToggle={() => {
+                updatePreferencesMutation.mutate({
+                  connection_accepted_enabled: !(notificationPrefs?.connection_accepted_enabled ?? true),
+                });
+              }}
+            />
+            <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
+            <SettingRow
+              icon="trophy"
+              iconColor="#F59E0B"
+              title="Achievements"
+              subtitle="Get notified of unlocked achievements"
+              value={notificationPrefs?.achievement_unlocked_enabled ?? true}
+              onToggle={() => {
+                updatePreferencesMutation.mutate({
+                  achievement_unlocked_enabled: !(notificationPrefs?.achievement_unlocked_enabled ?? true),
+                });
+              }}
             />
           </View>
         </View>

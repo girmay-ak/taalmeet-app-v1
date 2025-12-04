@@ -6,6 +6,7 @@
 import { supabase } from '@/lib/supabase';
 import { parseSupabaseError } from '@/utils/errors';
 import type { Profile } from '@/types/database';
+import * as notificationService from './notificationsService';
 
 // ============================================================================
 // TYPES
@@ -262,6 +263,18 @@ export async function unlockAchievement(
       'achievement_unlocked',
       achievementId
     );
+  }
+
+  // Send push notification for achievement unlock
+  try {
+    await notificationService.sendAchievementUnlockedNotification(
+      userId,
+      achievement.name,
+      achievement.points_reward
+    );
+  } catch (error) {
+    // Don't fail achievement unlock if notification fails
+    console.warn('Failed to send achievement notification:', error);
   }
 
   return data as UserAchievement;

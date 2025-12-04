@@ -47,3 +47,6 @@ export * from './useModeration';
 
 // Gamification Hooks
 export * from './useGamification';
+
+// Push Notifications Hooks
+export * from './useNotifications';

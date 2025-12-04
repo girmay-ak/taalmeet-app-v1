@@ -64,6 +64,13 @@
           "cameraPermission": "TAALMEET needs access to your camera to take profile pictures."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1DB954"
+        }
+      ],
       "@rnmapbox/maps",
       "expo-asset"
     ],
