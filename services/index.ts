@@ -38,3 +38,6 @@ export * from './storageService';
 
 // Safety Service (Blocking & Reporting)
 export * from './safetyService';
+
+// Data Export Service (GDPR)
+export * from './dataExportService';

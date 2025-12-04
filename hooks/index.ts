@@ -38,3 +38,6 @@ export * from './useDiscover';
 
 // Safety Hooks (Blocking & Reporting)
 export * from './useSafety';
+
+// Data Export Hooks (GDPR)
+export * from './useDataExport';
