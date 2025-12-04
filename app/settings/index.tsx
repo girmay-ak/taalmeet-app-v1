@@ -15,9 +15,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme/ThemeProvider';
+import { useIsAdmin } from '@/hooks/useModeration';
+import { useAuth } from '@/providers';
 
 export default function SettingsScreen() {
   const { colors, mode, toggleMode, theme, setTheme } = useTheme();
+  const { user } = useAuth();
+  const { data: isAdminUser } = useIsAdmin(user?.id);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [messageNotifications, setMessageNotifications] = useState(true);
   const [matchNotifications, setMatchNotifications] = useState(true);
@@ -228,6 +232,19 @@ export default function SettingsScreen() {
               onPress={() => router.push('/profile/verification')}
               showArrow
             />
+            {isAdminUser && (
+              <>
+                <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
+                <SettingRow
+                  icon="shield"
+                  iconColor="#EF4444"
+                  title="Admin Dashboard"
+                  subtitle="Content moderation"
+                  onPress={() => router.push('/admin')}
+                  showArrow
+                />
+              </>
+            )}
           </View>
         </View>
 

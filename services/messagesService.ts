@@ -19,6 +19,7 @@ import type {
 } from '@/types/database';
 import { getBlockedUserIds } from './safetyService';
 import { ENABLE_LOGGING } from '@/lib/config';
+import { validateMessageContent } from './moderationService';
 
 // ============================================================================
 // TYPES
@@ -299,6 +300,12 @@ export async function sendMessage(
       console.error('[messagesService] Message content is empty');
     }
     throw new ValidationError('Message content cannot be empty');
+  }
+
+  // Validate message content (profanity, spam detection)
+  const validation = validateMessageContent(text);
+  if (!validation.isValid) {
+    throw new ValidationError(validation.reason || 'Message content is invalid');
   }
 
   // Verify user is a participant

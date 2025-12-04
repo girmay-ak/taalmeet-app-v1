@@ -41,3 +41,6 @@ export * from './useSafety';
 
 // Data Export Hooks (GDPR)
 export * from './useDataExport';
+
+// Moderation Hooks (Admin)
+export * from './useModeration';
