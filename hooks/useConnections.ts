@@ -141,7 +141,12 @@ export function useAcceptRequest() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: (connectionId: string) => connectionsService.acceptRequest(connectionId),
+    mutationFn: (connectionId: string) => {
+      if (!user?.id) {
+        throw new Error('User not authenticated');
+      }
+      return connectionsService.acceptRequest(connectionId, user.id);
+    },
     onSuccess: () => {
       // Invalidate relevant queries
       if (user?.id) {

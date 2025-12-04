@@ -20,6 +20,7 @@ import type {
 import { getBlockedUserIds } from './safetyService';
 import { ENABLE_LOGGING } from '@/lib/config';
 import { validateMessageContent } from './moderationService';
+import * as gamificationService from './gamificationService';
 
 // ============================================================================
 // TYPES
@@ -351,6 +352,41 @@ export async function sendMessage(
   if (ENABLE_LOGGING) {
     console.log('[messagesService] Message sent successfully:', data.id);
   }
+
+  // Award points for sending messages (every 10th message gets bonus)
+  try {
+    const { count } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('sender_id', senderId);
+    
+    const messageCount = count || 0;
+    if (messageCount % 10 === 0) {
+      // Every 10th message gets bonus points
+      await gamificationService.addPoints(
+        senderId,
+        10,
+        `Sent ${messageCount} messages!`,
+        'conversation_message',
+        data.id
+      );
+    } else {
+      // Regular message points (smaller amount)
+      await gamificationService.addPoints(
+        senderId,
+        1,
+        'Sent a message',
+        'conversation_message',
+        data.id
+      );
+    }
+  } catch (error) {
+    // Don't fail message sending if points fail
+    if (ENABLE_LOGGING) {
+      console.warn('[messagesService] Failed to award points for message:', error);
+    }
+  }
+
   return data;
 }
 
@@ -447,6 +483,29 @@ export async function createConversation(
   if (ENABLE_LOGGING) {
     console.log('[messagesService] Conversation created/found:', conversationId);
   }
+
+  // Award points for starting a new conversation (only if it was just created)
+  // Check if this is a new conversation by checking if we returned early above
+  const wasNewConversation = !existing || checkError;
+  if (wasNewConversation) {
+    try {
+      await gamificationService.addPoints(
+        userId,
+        25,
+        'Started a new conversation',
+        'conversation_started',
+        conversationId
+      );
+      // Update conversation streak
+      await gamificationService.updateStreak(userId, 'daily_conversation');
+    } catch (error) {
+      // Don't fail the conversation creation if points fail
+      if (ENABLE_LOGGING) {
+        console.warn('[messagesService] Failed to award points for conversation:', error);
+      }
+    }
+  }
+
   return conversationId;
 }
 

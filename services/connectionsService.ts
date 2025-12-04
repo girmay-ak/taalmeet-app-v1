@@ -12,6 +12,7 @@ import {
 } from '@/utils/errors';
 import type { Connection, ConnectionInsert, ConnectionUpdate, Profile, UserLanguage } from '@/types/database';
 import { excludeBlockedUsers } from './safetyService';
+import * as gamificationService from './gamificationService';
 
 // ============================================================================
 // TYPES
@@ -323,7 +324,7 @@ export async function sendConnectionRequest(
 /**
  * Accept a connection request
  */
-export async function acceptRequest(connectionId: string): Promise<Connection> {
+export async function acceptRequest(connectionId: string, userId: string): Promise<Connection> {
   const { data, error } = await supabase
     .from('connections')
     .update({ 
@@ -336,6 +337,20 @@ export async function acceptRequest(connectionId: string): Promise<Connection> {
 
   if (error) {
     throw parseSupabaseError(error);
+  }
+
+  // Award points for accepting a connection
+  try {
+    await gamificationService.addPoints(
+      userId,
+      50,
+      'Made a new connection',
+      'connection_made',
+      connectionId
+    );
+  } catch (error) {
+    // Don't fail connection acceptance if points fail
+    console.warn('Failed to award points for connection:', error);
   }
 
   return data;
