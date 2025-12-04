@@ -17,6 +17,10 @@ export interface DiscoverFilters {
   language?: string; // Filter by language
   maxDistance?: number; // Max distance in km (default: 50)
   limit?: number; // Max results per category (default: 50)
+  gender?: 'all' | 'male' | 'female' | 'other' | 'prefer_not_to_say'; // Gender filter
+  availabilityOnly?: boolean; // Only show users who are available
+  minMatchScore?: number; // Minimum language match score (0-100)
+  preferredLanguages?: string[]; // Array of preferred language codes
 }
 
 export interface DiscoverUser extends Profile {
@@ -46,6 +50,10 @@ export async function getDiscoverFeed(
     language,
     maxDistance = 50,
     limit = 50,
+    gender,
+    availabilityOnly = false,
+    minMatchScore = 0,
+    preferredLanguages,
   } = filters;
 
   // Get current user's languages for matching
@@ -84,6 +92,16 @@ export async function getDiscoverFeed(
     `)
     .neq('id', userId);
 
+  // Apply gender filter
+  if (gender && gender !== 'all') {
+    baseQuery = baseQuery.eq('gender', gender);
+  }
+
+  // Apply availability filter
+  if (availabilityOnly) {
+    baseQuery = baseQuery.eq('is_available', true);
+  }
+
   // Apply language filter if provided
   if (language) {
     baseQuery = baseQuery
@@ -92,6 +110,16 @@ export async function getDiscoverFeed(
           .from('user_languages')
           .select('user_id')
           .eq('language', language)
+          .neq('user_id', userId)
+      );
+  } else if (preferredLanguages && preferredLanguages.length > 0) {
+    // Filter by preferred languages array
+    baseQuery = baseQuery
+      .in('id', 
+        supabase
+          .from('user_languages')
+          .select('user_id')
+          .in('language', preferredLanguages)
           .neq('user_id', userId)
       );
   }
@@ -169,8 +197,14 @@ export async function getDiscoverFeed(
     // Filter by maxDistance if location is available
     if (maxDistance && user.lat && user.lng && userLat && userLng) {
       const distance = calculateDistance(userLat, userLng, user.lat, user.lng);
-      return distance <= maxDistance;
+      if (distance > maxDistance) return false;
     }
+    
+    // Filter by minimum match score
+    if (minMatchScore > 0 && (user.matchScore || 0) < minMatchScore) {
+      return false;
+    }
+    
     return true;
   }).sort((a, b) => {
     // Sort by match score (descending), then by last_active_at
@@ -198,10 +232,38 @@ export async function getDiscoverFeed(
     throw parseSupabaseError(newUsersError);
   }
 
-  const newUsers: DiscoverUser[] = (newUsersProfiles || []).map((profile: any) => ({
-    ...profile,
-    languages: profile.languages || [],
-  }));
+  const newUsers: DiscoverUser[] = (newUsersProfiles || []).map((profile: any) => {
+    const userLanguages = (profile.languages || []) as UserLanguage[];
+    const matchScore = calculateLanguageMatchScore(
+      currentUserTeaching,
+      currentUserLearning,
+      userLanguages
+    );
+
+    let distance: number | undefined;
+    if (userLat && userLng && profile.lat && profile.lng) {
+      distance = calculateDistance(userLat, userLng, profile.lat, profile.lng);
+    }
+
+    return {
+      ...profile,
+      languages: userLanguages,
+      matchScore,
+    };
+  }).filter((user: DiscoverUser) => {
+    // Filter by maxDistance if location is available
+    if (maxDistance && user.lat && user.lng && userLat && userLng) {
+      const distance = calculateDistance(userLat, userLng, user.lat, user.lng);
+      if (distance > maxDistance) return false;
+    }
+    
+    // Filter by minimum match score
+    if (minMatchScore > 0 && (user.matchScore || 0) < minMatchScore) {
+      return false;
+    }
+    
+    return true;
+  });
 
   // ============================================================================
   // ACTIVE USERS
@@ -222,10 +284,38 @@ export async function getDiscoverFeed(
     throw parseSupabaseError(activeUsersError);
   }
 
-  const activeUsers: DiscoverUser[] = (activeUsersProfiles || []).map((profile: any) => ({
-    ...profile,
-    languages: profile.languages || [],
-  }));
+  const activeUsers: DiscoverUser[] = (activeUsersProfiles || []).map((profile: any) => {
+    const userLanguages = (profile.languages || []) as UserLanguage[];
+    const matchScore = calculateLanguageMatchScore(
+      currentUserTeaching,
+      currentUserLearning,
+      userLanguages
+    );
+
+    let distance: number | undefined;
+    if (userLat && userLng && profile.lat && profile.lng) {
+      distance = calculateDistance(userLat, userLng, profile.lat, profile.lng);
+    }
+
+    return {
+      ...profile,
+      languages: userLanguages,
+      matchScore,
+    };
+  }).filter((user: DiscoverUser) => {
+    // Filter by maxDistance if location is available
+    if (maxDistance && user.lat && user.lng && userLat && userLng) {
+      const distance = calculateDistance(userLat, userLng, user.lat, user.lng);
+      if (distance > maxDistance) return false;
+    }
+    
+    // Filter by minimum match score
+    if (minMatchScore > 0 && (user.matchScore || 0) < minMatchScore) {
+      return false;
+    }
+    
+    return true;
+  });
 
   // ============================================================================
   // SESSIONS

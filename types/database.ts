@@ -116,6 +116,11 @@ export interface Database {
         Insert: SupportTicketMessageInsert;
         Update: never;
       };
+      discovery_filter_preferences: {
+        Row: DiscoveryFilterPreferences;
+        Insert: DiscoveryFilterPreferencesInsert;
+        Update: DiscoveryFilterPreferencesUpdate;
+      };
     };
   };
 }
@@ -863,5 +868,41 @@ export interface SupportTicketMessageInsert {
   message: string;
   is_internal?: boolean;
   attachments?: Record<string, any> | null;
+}
+
+// ============================================================================
+// DISCOVERY_FILTER_PREFERENCES TABLE
+// ============================================================================
+
+export interface DiscoveryFilterPreferences {
+  id: string;
+  user_id: string;
+  max_distance: number;
+  preferred_languages: string[] | null;
+  gender_preference: 'all' | 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  availability_filter: boolean;
+  timezone_match: boolean;
+  min_match_score: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiscoveryFilterPreferencesInsert {
+  user_id: string;
+  max_distance?: number;
+  preferred_languages?: string[] | null;
+  gender_preference?: 'all' | 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  availability_filter?: boolean;
+  timezone_match?: boolean;
+  min_match_score?: number;
+}
+
+export interface DiscoveryFilterPreferencesUpdate {
+  max_distance?: number;
+  preferred_languages?: string[] | null;
+  gender_preference?: 'all' | 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  availability_filter?: boolean;
+  timezone_match?: boolean;
+  min_match_score?: number;
 }
 

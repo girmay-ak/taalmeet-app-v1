@@ -2,7 +2,7 @@
  * Home/Discover Screen - Matches Figma Design
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -25,26 +25,55 @@ import { EventCard } from '@/components/events/EventCard';
 import { EventHorizontalCard } from '@/components/events/EventHorizontalCard';
 import { getLanguageFlag } from '@/utils/languageFlags';
 import type { DiscoverFilters } from '@/services/discoverService';
+import { DiscoveryFiltersModal } from '@/components/discovery/DiscoveryFiltersModal';
+import { useDiscoveryFilterPreferences } from '@/hooks/useDiscoveryFilters';
 
 const languageCategories = ['All', 'Spanish', 'Japanese', 'French', 'Italian', 'German', 'Dutch', 'English'];
 
 export default function HomeScreen() {
   const { colors } = useTheme();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [selectedLanguage, setSelectedLanguage] = useState<string>('All');
   const [refreshing, setRefreshing] = useState(false);
+  const [showFiltersModal, setShowFiltersModal] = useState(false);
+  const [filters, setFilters] = useState<DiscoverFilters>({
+    language: undefined,
+    maxDistance: 50,
+    limit: 50,
+    gender: 'all',
+    availabilityOnly: false,
+    minMatchScore: 0,
+  });
+
+  // Load saved preferences
+  const { data: savedPreferences } = useDiscoveryFilterPreferences(user?.id);
+  
+  // Apply saved preferences on mount
+  // Apply saved preferences on mount
+  useEffect(() => {
+    if (savedPreferences) {
+      setFilters({
+        language: undefined,
+        maxDistance: savedPreferences.max_distance,
+        limit: 50,
+        gender: savedPreferences.gender_preference,
+        availabilityOnly: savedPreferences.availability_filter,
+        minMatchScore: savedPreferences.min_match_score,
+        preferredLanguages: savedPreferences.preferred_languages || undefined,
+      });
+    }
+  }, [savedPreferences]);
 
   const userName = profile?.displayName || 'Language Learner';
 
-  // Build filters for discover feed
-  const filters: DiscoverFilters = {
+  // Build filters for discover feed (merge with language selection)
+  const activeFilters: DiscoverFilters = {
+    ...filters,
     language: selectedLanguage === 'All' ? undefined : selectedLanguage,
-    maxDistance: 50,
-    limit: 50,
   };
 
   // Fetch discover feed
-  const { data, isLoading, error, refetch } = useDiscoverFeed(filters);
+  const { data, isLoading, error, refetch } = useDiscoverFeed(activeFilters);
 
   // Fetch Eventbrite events for selected language
   const {
@@ -182,10 +211,21 @@ export default function HomeScreen() {
               <Text style={[styles.userName, { color: colors.text.primary }]}>{userName}</Text>
             </View>
           </View>
-          <TouchableOpacity style={[styles.notificationButton, { backgroundColor: colors.background.primary }]}>
-            <Ionicons name="notifications-outline" size={24} color={colors.text.primary} />
-            <View style={[styles.notificationDot, { backgroundColor: colors.primary }]} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={[styles.filterButton, { backgroundColor: colors.background.primary }]}
+              onPress={() => setShowFiltersModal(true)}
+            >
+              <Ionicons name="filter" size={20} color={colors.text.primary} />
+              {(filters.gender !== 'all' || filters.availabilityOnly || (filters.maxDistance || 50) !== 50 || (filters.minMatchScore || 0) > 0) && (
+                <View style={[styles.filterDot, { backgroundColor: colors.primary }]} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.notificationButton, { backgroundColor: colors.background.primary }]}>
+              <Ionicons name="notifications-outline" size={24} color={colors.text.primary} />
+              <View style={[styles.notificationDot, { backgroundColor: colors.primary }]} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Section Title */}
@@ -376,6 +416,17 @@ export default function HomeScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* Filters Modal */}
+      <DiscoveryFiltersModal
+        visible={showFiltersModal}
+        onClose={() => setShowFiltersModal(false)}
+        currentFilters={filters}
+        onApplyFilters={(newFilters) => {
+          setFilters(newFilters);
+          refetch();
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -413,6 +464,27 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  filterButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  filterDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   notificationButton: {
     width: 44,

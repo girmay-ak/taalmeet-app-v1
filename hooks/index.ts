@@ -53,3 +53,6 @@ export * from './useNotifications';
 
 // Help & Support Hooks
 export * from './useHelp';
+
+// Discovery Filters Hooks
+export * from './useDiscoveryFilters';

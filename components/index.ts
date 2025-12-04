@@ -64,6 +64,9 @@ export { ActionModal } from './modals/ActionModal';
 // Notifications
 export { PushNotificationsSetup } from './notifications/PushNotificationsSetup';
 
+// Discovery
+export { DiscoveryFiltersModal } from './discovery/DiscoveryFiltersModal';
+
 // Icons
 export * from './icons';
 

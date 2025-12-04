@@ -48,3 +48,4 @@ export * from './moderationService';
 // Gamification Service
 export * from './gamificationService';
 export * from './helpService';
+export * from './discoveryFilterService';
