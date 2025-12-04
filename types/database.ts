@@ -136,6 +136,36 @@ export interface Database {
         Insert: VocabularyInsert;
         Update: VocabularyUpdate;
       };
+      groups: {
+        Row: Group;
+        Insert: GroupInsert;
+        Update: GroupUpdate;
+      };
+      group_members: {
+        Row: GroupMember;
+        Insert: GroupMemberInsert;
+        Update: GroupMemberUpdate;
+      };
+      group_posts: {
+        Row: GroupPost;
+        Insert: GroupPostInsert;
+        Update: GroupPostUpdate;
+      };
+      group_post_comments: {
+        Row: GroupPostComment;
+        Insert: GroupPostCommentInsert;
+        Update: GroupPostCommentUpdate;
+      };
+      group_events: {
+        Row: GroupEvent;
+        Insert: GroupEventInsert;
+        Update: GroupEventUpdate;
+      };
+      group_event_participants: {
+        Row: GroupEventParticipant;
+        Insert: GroupEventParticipantInsert;
+        Update: GroupEventParticipantUpdate;
+      };
     };
   };
 }
@@ -1018,5 +1048,218 @@ export interface VocabularyUpdate {
   last_reviewed_at?: string | null;
   mastery_level?: number;
   tags?: string[] | null;
+}
+
+// ============================================================================
+// GROUPS TABLE
+// ============================================================================
+
+export interface Group {
+  id: string;
+  name: string;
+  description: string | null;
+  cover_image_url: string | null;
+  language: string;
+  location: string | null;
+  lat: number | null;
+  lng: number | null;
+  is_public: boolean;
+  is_verified: boolean;
+  member_count: number;
+  post_count: number;
+  event_count: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupInsert {
+  name: string;
+  description?: string | null;
+  cover_image_url?: string | null;
+  language: string;
+  location?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  is_public?: boolean;
+  created_by: string;
+}
+
+export interface GroupUpdate {
+  name?: string;
+  description?: string | null;
+  cover_image_url?: string | null;
+  language?: string;
+  location?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  is_public?: boolean;
+}
+
+// ============================================================================
+// GROUP_MEMBERS TABLE
+// ============================================================================
+
+export interface GroupMember {
+  id: string;
+  group_id: string;
+  user_id: string;
+  role: 'owner' | 'admin' | 'moderator' | 'member';
+  status: 'active' | 'pending' | 'banned' | 'left';
+  joined_at: string;
+  last_active_at: string;
+}
+
+export interface GroupMemberInsert {
+  group_id: string;
+  user_id: string;
+  role?: 'owner' | 'admin' | 'moderator' | 'member';
+  status?: 'active' | 'pending' | 'banned' | 'left';
+}
+
+export interface GroupMemberUpdate {
+  role?: 'owner' | 'admin' | 'moderator' | 'member';
+  status?: 'active' | 'pending' | 'banned' | 'left';
+}
+
+// ============================================================================
+// GROUP_POSTS TABLE
+// ============================================================================
+
+export interface GroupPost {
+  id: string;
+  group_id: string;
+  author_id: string;
+  content: string;
+  image_urls: string[] | null;
+  like_count: number;
+  comment_count: number;
+  is_pinned: boolean;
+  is_edited: boolean;
+  edited_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupPostInsert {
+  group_id: string;
+  author_id: string;
+  content: string;
+  image_urls?: string[] | null;
+}
+
+export interface GroupPostUpdate {
+  content?: string;
+  image_urls?: string[] | null;
+  is_pinned?: boolean;
+}
+
+// ============================================================================
+// GROUP_POST_COMMENTS TABLE
+// ============================================================================
+
+export interface GroupPostComment {
+  id: string;
+  post_id: string;
+  author_id: string;
+  content: string;
+  parent_comment_id: string | null;
+  like_count: number;
+  is_edited: boolean;
+  edited_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupPostCommentInsert {
+  post_id: string;
+  author_id: string;
+  content: string;
+  parent_comment_id?: string | null;
+}
+
+export interface GroupPostCommentUpdate {
+  content?: string;
+}
+
+// ============================================================================
+// GROUP_EVENTS TABLE
+// ============================================================================
+
+export interface GroupEvent {
+  id: string;
+  group_id: string;
+  created_by: string;
+  title: string;
+  description: string | null;
+  event_type: 'meetup' | 'online' | 'workshop' | 'social';
+  start_time: string;
+  end_time: string | null;
+  location: string | null;
+  lat: number | null;
+  lng: number | null;
+  max_participants: number | null;
+  participant_count: number;
+  is_online: boolean;
+  online_link: string | null;
+  cover_image_url: string | null;
+  status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupEventInsert {
+  group_id: string;
+  created_by: string;
+  title: string;
+  description?: string | null;
+  event_type?: 'meetup' | 'online' | 'workshop' | 'social';
+  start_time: string;
+  end_time?: string | null;
+  location?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  max_participants?: number | null;
+  is_online?: boolean;
+  online_link?: string | null;
+  cover_image_url?: string | null;
+}
+
+export interface GroupEventUpdate {
+  title?: string;
+  description?: string | null;
+  event_type?: 'meetup' | 'online' | 'workshop' | 'social';
+  start_time?: string;
+  end_time?: string | null;
+  location?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  max_participants?: number | null;
+  is_online?: boolean;
+  online_link?: string | null;
+  cover_image_url?: string | null;
+  status?: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+}
+
+// ============================================================================
+// GROUP_EVENT_PARTICIPANTS TABLE
+// ============================================================================
+
+export interface GroupEventParticipant {
+  id: string;
+  event_id: string;
+  user_id: string;
+  status: 'going' | 'interested' | 'not_going';
+  joined_at: string;
+}
+
+export interface GroupEventParticipantInsert {
+  event_id: string;
+  user_id: string;
+  status?: 'going' | 'interested' | 'not_going';
+}
+
+export interface GroupEventParticipantUpdate {
+  status?: 'going' | 'interested' | 'not_going';
 }
 

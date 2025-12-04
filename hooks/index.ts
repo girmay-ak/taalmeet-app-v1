@@ -59,3 +59,6 @@ export * from './useDiscoveryFilters';
 
 // Translation Hooks
 export * from './useTranslation';
+
+// Groups Hooks
+export * from './useGroups';
