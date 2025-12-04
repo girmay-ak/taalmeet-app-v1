@@ -121,6 +121,21 @@ export interface Database {
         Insert: DiscoveryFilterPreferencesInsert;
         Update: DiscoveryFilterPreferencesUpdate;
       };
+      translation_preferences: {
+        Row: TranslationPreferences;
+        Insert: TranslationPreferencesInsert;
+        Update: TranslationPreferencesUpdate;
+      };
+      translation_history: {
+        Row: TranslationHistory;
+        Insert: TranslationHistoryInsert;
+        Update: never;
+      };
+      vocabulary: {
+        Row: Vocabulary;
+        Insert: VocabularyInsert;
+        Update: VocabularyUpdate;
+      };
     };
   };
 }
@@ -904,5 +919,104 @@ export interface DiscoveryFilterPreferencesUpdate {
   availability_filter?: boolean;
   timezone_match?: boolean;
   min_match_score?: number;
+}
+
+// ============================================================================
+// TRANSLATION_PREFERENCES TABLE
+// ============================================================================
+
+export interface TranslationPreferences {
+  id: string;
+  user_id: string;
+  auto_translate_enabled: boolean;
+  default_target_language: string | null;
+  show_original_text: boolean;
+  translation_provider: 'libretranslate' | 'google' | 'microsoft';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TranslationPreferencesInsert {
+  user_id: string;
+  auto_translate_enabled?: boolean;
+  default_target_language?: string | null;
+  show_original_text?: boolean;
+  translation_provider?: 'libretranslate' | 'google' | 'microsoft';
+}
+
+export interface TranslationPreferencesUpdate {
+  auto_translate_enabled?: boolean;
+  default_target_language?: string | null;
+  show_original_text?: boolean;
+  translation_provider?: 'libretranslate' | 'google' | 'microsoft';
+}
+
+// ============================================================================
+// TRANSLATION_HISTORY TABLE
+// ============================================================================
+
+export interface TranslationHistory {
+  id: string;
+  user_id: string;
+  original_text: string;
+  translated_text: string;
+  source_language: string;
+  target_language: string;
+  detected_language: string | null;
+  context: string | null;
+  message_id: string | null;
+  created_at: string;
+}
+
+export interface TranslationHistoryInsert {
+  user_id: string;
+  original_text: string;
+  translated_text: string;
+  source_language: string;
+  target_language: string;
+  detected_language?: string | null;
+  context?: string | null;
+  message_id?: string | null;
+}
+
+// ============================================================================
+// VOCABULARY TABLE
+// ============================================================================
+
+export interface Vocabulary {
+  id: string;
+  user_id: string;
+  word: string;
+  translation: string;
+  source_language: string;
+  target_language: string;
+  example_sentence: string | null;
+  difficulty_level: number;
+  times_reviewed: number;
+  last_reviewed_at: string | null;
+  mastery_level: number;
+  tags: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VocabularyInsert {
+  user_id: string;
+  word: string;
+  translation: string;
+  source_language: string;
+  target_language: string;
+  example_sentence?: string | null;
+  difficulty_level?: number;
+  tags?: string[] | null;
+}
+
+export interface VocabularyUpdate {
+  example_sentence?: string | null;
+  difficulty_level?: number;
+  times_reviewed?: number;
+  last_reviewed_at?: string | null;
+  mastery_level?: number;
+  tags?: string[] | null;
 }
 

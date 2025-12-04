@@ -49,3 +49,4 @@ export * from './moderationService';
 export * from './gamificationService';
 export * from './helpService';
 export * from './discoveryFilterService';
+export * from './translationService';

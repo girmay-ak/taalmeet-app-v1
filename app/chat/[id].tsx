@@ -26,6 +26,8 @@ import { useUserProfile } from '@/hooks/useUser';
 import { useIsBlocked, useBlockUser } from '@/hooks/useSafety';
 import { ReportUserModal } from '@/components/modals/ReportUserModal';
 import { ActivityIndicator, Alert } from 'react-native';
+import { TranslationButton, MessageTranslation } from '@/components/chat/TranslationButton';
+import { useTranslateText, useTranslationPreferences } from '@/hooks/useTranslation';
 
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
@@ -34,6 +36,8 @@ export default function ChatScreen() {
   const [message, setMessage] = useState('');
   const [showMenu, setShowMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [messageTranslations, setMessageTranslations] = useState<Record<string, { text: string; show: boolean }>>({});
+  const [translatingMessages, setTranslatingMessages] = useState<Record<string, boolean>>({});
   
   // Fetch messages from backend
   const { data: messages = [], isLoading: messagesLoading, isError: messagesError, error: messagesErrorObj } = useMessages(conversationId);
@@ -52,6 +56,14 @@ export default function ChatScreen() {
   // Check if user is blocked
   const { data: isBlocked = false } = useIsBlocked(currentUser?.id, partnerId);
   const blockUserMutation = useBlockUser();
+
+  // Translation hooks
+  const { data: translationPreferences } = useTranslationPreferences(currentUser?.id);
+  const translateMutation = useTranslateText();
+
+  // Get user's learning language as target for translation (from profile)
+  // Default to English if not available
+  const learningLanguage = translationPreferences?.default_target_language || 'en';
 
   // Debug logging (only in development)
   if (__DEV__) {
@@ -91,6 +103,39 @@ export default function ChatScreen() {
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Handle message translation
+  const handleTranslateMessage = async (messageId: string, text: string) => {
+    if (messageTranslations[messageId]) {
+      // Toggle existing translation
+      setMessageTranslations(prev => ({
+        ...prev,
+        [messageId]: { ...prev[messageId], show: !prev[messageId].show }
+      }));
+      return;
+    }
+
+    // Translate message
+    setTranslatingMessages(prev => ({ ...prev, [messageId]: true }));
+    try {
+      const result = await translateMutation.mutateAsync({
+        text,
+        targetLanguage: learningLanguage,
+        saveToHistory: true,
+        context: 'chat_message',
+        messageId,
+      });
+
+      setMessageTranslations(prev => ({
+        ...prev,
+        [messageId]: { text: result.translatedText, show: true }
+      }));
+    } catch (error) {
+      console.error('Translation failed:', error);
+    } finally {
+      setTranslatingMessages(prev => ({ ...prev, [messageId]: false }));
+    }
   };
 
   // Handle block user
@@ -277,8 +322,23 @@ export default function ChatScreen() {
                   ]}
                 >
                   <Text style={[styles.messageText, { color: isMyMessage ? '#FFFFFF' : colors.text.primary }]}>
-                    {msg.content}
+                    {messageTranslations[msg.id]?.show && messageTranslations[msg.id]?.text
+                      ? messageTranslations[msg.id].text
+                      : msg.content}
                   </Text>
+                  
+                  {/* Translation Display */}
+                  {!isMyMessage && messageTranslations[msg.id] && (
+                    <MessageTranslation
+                      originalText={msg.content}
+                      translatedText={messageTranslations[msg.id].text}
+                      showTranslation={messageTranslations[msg.id].show}
+                      onToggle={() => handleTranslateMessage(msg.id, msg.content)}
+                      isTranslating={translatingMessages[msg.id] || false}
+                      sourceLanguage={undefined} // Will be detected
+                      targetLanguage={learningLanguage}
+                    />
+                  )}
                 </View>
 
                 {/* Message Actions */}
@@ -288,8 +348,20 @@ export default function ChatScreen() {
                   </Text>
                   {!isMyMessage && (
                     <>
-                      <TouchableOpacity style={styles.actionButton}>
-                        <Ionicons name="language-outline" size={14} color={colors.text.muted} />
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => handleTranslateMessage(msg.id, msg.content)}
+                        disabled={translatingMessages[msg.id]}
+                      >
+                        {translatingMessages[msg.id] ? (
+                          <ActivityIndicator size="small" color={colors.text.muted} />
+                        ) : (
+                          <Ionicons
+                            name={messageTranslations[msg.id] ? 'eye-off-outline' : 'language-outline'}
+                            size={14}
+                            color={messageTranslations[msg.id] ? colors.primary : colors.text.muted}
+                          />
+                        )}
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.actionButton}>
                         <Ionicons name="volume-high-outline" size={14} color={colors.text.muted} />

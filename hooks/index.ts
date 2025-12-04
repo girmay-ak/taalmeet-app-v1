@@ -56,3 +56,6 @@ export * from './useHelp';
 
 // Discovery Filters Hooks
 export * from './useDiscoveryFilters';
+
+// Translation Hooks
+export * from './useTranslation';
