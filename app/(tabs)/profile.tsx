@@ -392,6 +392,13 @@ export default function ProfileScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.menuItem, { borderBottomColor: colors.border.default }]}
+            onPress={() => router.push('/groups')}
+          >
+            <Text style={[styles.menuText, { color: colors.text.primary }]}>Groups & Communities</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.text.muted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: colors.border.default }]}
             onPress={() => setShowChangePasswordModal(true)}
           >
             <Text style={[styles.menuText, { color: colors.text.primary }]}>Change Password</Text>
