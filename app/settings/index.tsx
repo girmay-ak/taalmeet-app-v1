@@ -239,7 +239,7 @@ export default function SettingsScreen() {
               icon="document-text"
               iconColor={colors.text.muted}
               title="Terms of Service"
-              onPress={() => {}}
+              onPress={() => router.push('/legal/terms-of-service')}
               showArrow
             />
             <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
@@ -247,7 +247,7 @@ export default function SettingsScreen() {
               icon="shield-checkmark"
               iconColor={colors.text.muted}
               title="Privacy Policy"
-              onPress={() => {}}
+              onPress={() => router.push('/legal/privacy-policy')}
               showArrow
             />
             <View style={[styles.divider, { backgroundColor: colors.border.default }]} />

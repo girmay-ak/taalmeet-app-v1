@@ -10,18 +10,28 @@ import {
   TouchableOpacity,
   Switch,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme/ThemeProvider';
+import { DeleteAccountModal } from '@/components/modals/DeleteAccountModal';
+import { useBlockedUsers } from '@/hooks/useSafety';
+import { useAuth } from '@/providers';
+import { useExportUserData } from '@/hooks/useDataExport';
 
 export default function PrivacySafetyScreen() {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const [showOnlineStatus, setShowOnlineStatus] = useState(true);
   const [showDistance, setShowDistance] = useState(true);
   const [showLastActive, setShowLastActive] = useState(true);
   const [readReceipts, setReadReceipts] = useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  
+  const { data: blockedUsers = [] } = useBlockedUsers(user?.id);
+  const exportDataMutation = useExportUserData();
 
   const SettingRow = ({
     icon,
@@ -150,8 +160,11 @@ export default function PrivacySafetyScreen() {
               icon="eye-off"
               iconColor="#EF4444"
               title="Blocked Users"
-              subtitle="Manage blocked accounts"
-              onPress={() => {}}
+              subtitle={`${blockedUsers.length} user${blockedUsers.length !== 1 ? 's' : ''} blocked`}
+              onPress={() => {
+                // TODO: Navigate to blocked users list screen
+                Alert.alert('Blocked Users', `You have ${blockedUsers.length} blocked user(s). Unblock functionality coming soon.`);
+              }}
               showArrow
             />
             <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
@@ -174,8 +187,23 @@ export default function PrivacySafetyScreen() {
               icon="download"
               iconColor="#5FB3B3"
               title="Download My Data"
-              subtitle="Request a copy of your data"
-              onPress={() => {}}
+              subtitle="Export your data (GDPR)"
+              onPress={() => {
+                if (exportDataMutation.isPending) {
+                  Alert.alert('Please wait', 'Data export in progress...');
+                  return;
+                }
+                exportDataMutation.mutate();
+              }}
+              showArrow
+            />
+            <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
+            <SettingRow
+              icon="document-text"
+              iconColor={colors.text.muted}
+              title="Privacy Policy"
+              subtitle="Read our privacy policy"
+              onPress={() => router.push('/legal/privacy-policy')}
               showArrow
             />
             <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
@@ -184,12 +212,18 @@ export default function PrivacySafetyScreen() {
               iconColor="#EF4444"
               title="Delete Account"
               subtitle="Permanently delete your account"
-              onPress={() => {}}
+              onPress={() => setShowDeleteModal(true)}
               showArrow
             />
           </View>
         </View>
       </ScrollView>
+      
+      {/* Delete Account Modal */}
+      <DeleteAccountModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+      />
     </SafeAreaView>
   );
 }

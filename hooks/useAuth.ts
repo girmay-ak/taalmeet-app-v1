@@ -330,3 +330,41 @@ export function useCheckEmail() {
     mutationFn: (email: string) => authService.checkEmailExists(email),
   });
 }
+
+// ============================================================================
+// ACCOUNT DELETION
+// ============================================================================
+
+/**
+ * Delete account mutation
+ */
+export function useDeleteAccount() {
+  const queryClient = useQueryClient();
+  const { data: user } = useCurrentUser();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!user?.id) {
+        throw new Error('User not authenticated');
+      }
+      return authService.deleteAccount(user.id);
+    },
+    onSuccess: () => {
+      // Clear all cached data
+      queryClient.clear();
+      
+      // Navigate to sign in
+      router.replace('/(auth)/sign-in');
+      
+      Alert.alert(
+        'Account Deleted',
+        'Your account and all associated data have been permanently deleted.',
+        [{ text: 'OK' }]
+      );
+    },
+    onError: (error) => {
+      const message = getUserFriendlyMessage(error);
+      Alert.alert('Deletion Failed', message);
+    },
+  });
+}

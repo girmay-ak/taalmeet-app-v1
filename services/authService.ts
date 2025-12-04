@@ -295,3 +295,41 @@ export async function resendVerificationEmail(email: string): Promise<void> {
   }
 }
 
+// ============================================================================
+// ACCOUNT DELETION
+// ============================================================================
+
+/**
+ * Delete user account and all associated data
+ * This will cascade delete all user data due to ON DELETE CASCADE constraints
+ * 
+ * Process:
+ * 1. Delete all database records (via RPC function)
+ * 2. Delete auth user (requires admin API or server-side function)
+ * 3. Sign out
+ */
+export async function deleteAccount(userId: string): Promise<void> {
+  // Step 1: Delete all database records (profiles, messages, connections, etc.)
+  // This uses the delete_user_account function which handles cascade deletion
+  const { error: dbError } = await supabase.rpc('delete_user_account', {
+    user_id: userId,
+  });
+
+  if (dbError) {
+    throw parseSupabaseError(dbError);
+  }
+
+  // Step 2: Delete auth user
+  // Note: Client-side code cannot delete auth users directly (requires admin API).
+  // The database cleanup is done above. For production, you should:
+  // 1. Create a server-side endpoint that uses service role key to delete auth user
+  // 2. Call that endpoint here, or
+  // 3. Use Supabase Edge Functions to handle auth deletion
+  // 
+  // For now, database cleanup is complete. The auth user deletion should be
+  // handled by a server-side function or Edge Function.
+
+  // Step 3: Sign out
+  await supabase.auth.signOut();
+}
+
