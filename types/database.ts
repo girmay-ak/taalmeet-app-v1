@@ -96,6 +96,26 @@ export interface Database {
         Insert: NotificationPreferencesInsert;
         Update: NotificationPreferencesUpdate;
       };
+      help_articles: {
+        Row: HelpArticle;
+        Insert: HelpArticleInsert;
+        Update: HelpArticleUpdate;
+      };
+      faqs: {
+        Row: FAQ;
+        Insert: FAQInsert;
+        Update: FAQUpdate;
+      };
+      support_tickets: {
+        Row: SupportTicket;
+        Insert: SupportTicketInsert;
+        Update: SupportTicketUpdate;
+      };
+      support_ticket_messages: {
+        Row: SupportTicketMessage;
+        Insert: SupportTicketMessageInsert;
+        Update: never;
+      };
     };
   };
 }
@@ -709,5 +729,139 @@ export interface NotificationPreferencesUpdate {
   quiet_hours_start?: string | null;
   quiet_hours_end?: string | null;
   timezone?: string;
+}
+
+// ============================================================================
+// HELP_ARTICLES TABLE
+// ============================================================================
+
+export interface HelpArticle {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  category: 'getting_started' | 'features' | 'troubleshooting' | 'account' | 'safety' | 'payments' | 'other';
+  tags: string[] | null;
+  order_index: number;
+  is_published: boolean;
+  view_count: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface HelpArticleInsert {
+  title: string;
+  slug: string;
+  content: string;
+  category: 'getting_started' | 'features' | 'troubleshooting' | 'account' | 'safety' | 'payments' | 'other';
+  tags?: string[] | null;
+  order_index?: number;
+  is_published?: boolean;
+  created_by?: string | null;
+}
+
+export interface HelpArticleUpdate {
+  title?: string;
+  slug?: string;
+  content?: string;
+  category?: 'getting_started' | 'features' | 'troubleshooting' | 'account' | 'safety' | 'payments' | 'other';
+  tags?: string[] | null;
+  order_index?: number;
+  is_published?: boolean;
+}
+
+// ============================================================================
+// FAQS TABLE
+// ============================================================================
+
+export interface FAQ {
+  id: string;
+  question: string;
+  answer: string;
+  category: 'general' | 'account' | 'connections' | 'messages' | 'safety' | 'payments' | 'technical' | 'other';
+  order_index: number;
+  is_published: boolean;
+  view_count: number;
+  helpful_count: number;
+  not_helpful_count: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface FAQInsert {
+  question: string;
+  answer: string;
+  category: 'general' | 'account' | 'connections' | 'messages' | 'safety' | 'payments' | 'technical' | 'other';
+  order_index?: number;
+  is_published?: boolean;
+  created_by?: string | null;
+}
+
+export interface FAQUpdate {
+  question?: string;
+  answer?: string;
+  category?: 'general' | 'account' | 'connections' | 'messages' | 'safety' | 'payments' | 'technical' | 'other';
+  order_index?: number;
+  is_published?: boolean;
+}
+
+// ============================================================================
+// SUPPORT_TICKETS TABLE
+// ============================================================================
+
+export interface SupportTicket {
+  id: string;
+  user_id: string;
+  subject: string;
+  category: 'account' | 'technical' | 'billing' | 'safety' | 'feature_request' | 'bug_report' | 'other';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'open' | 'in_progress' | 'waiting_user' | 'resolved' | 'closed';
+  assigned_to: string | null;
+  first_message: string;
+  last_message_at: string;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupportTicketInsert {
+  user_id: string;
+  subject: string;
+  category: 'account' | 'technical' | 'billing' | 'safety' | 'feature_request' | 'bug_report' | 'other';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  first_message: string;
+}
+
+export interface SupportTicketUpdate {
+  subject?: string;
+  category?: 'account' | 'technical' | 'billing' | 'safety' | 'feature_request' | 'bug_report' | 'other';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  status?: 'open' | 'in_progress' | 'waiting_user' | 'resolved' | 'closed';
+  assigned_to?: string | null;
+  resolved_at?: string | null;
+}
+
+// ============================================================================
+// SUPPORT_TICKET_MESSAGES TABLE
+// ============================================================================
+
+export interface SupportTicketMessage {
+  id: string;
+  ticket_id: string;
+  sender_id: string;
+  message: string;
+  is_internal: boolean;
+  attachments: Record<string, any> | null;
+  created_at: string;
+}
+
+export interface SupportTicketMessageInsert {
+  ticket_id: string;
+  sender_id: string;
+  message: string;
+  is_internal?: boolean;
+  attachments?: Record<string, any> | null;
 }
 

@@ -8,35 +8,70 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  TextInput,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import { useState } from 'react';
-
-const faqs = [
-  {
-    question: 'How do I find language partners?',
-    answer: 'Use the Discover tab to browse sessions and the Map to find partners nearby.'
-  },
-  {
-    question: 'How does matching work?',
-    answer: 'We match you based on language compatibility, location, and shared interests.'
-  },
-  {
-    question: 'Is TaalMeet free?',
-    answer: 'Yes! TaalMeet is free with optional Premium features for enhanced experience.'
-  },
-  {
-    question: 'How do I report inappropriate behavior?',
-    answer: 'Go to Privacy & Safety settings and tap "Report an Issue".'
-  }
-];
+import { useFAQs, useCreateSupportTicket, useSupportTickets, useRateFAQ } from '@/hooks/useHelp';
+import { useAuth } from '@/providers';
 
 export default function HelpSupportScreen() {
   const { colors } = useTheme();
-  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const { user } = useAuth();
+  const [expandedFaq, setExpandedFaq] = useState<string | null>(null);
+  const [showSupportForm, setShowSupportForm] = useState(false);
+  const [supportSubject, setSupportSubject] = useState('');
+  const [supportMessage, setSupportMessage] = useState('');
+  const [supportCategory, setSupportCategory] = useState<'account' | 'technical' | 'billing' | 'safety' | 'feature_request' | 'bug_report' | 'other'>('other');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const { data: faqs = [], isLoading: faqsLoading } = useFAQs();
+  const { data: tickets = [] } = useSupportTickets(user?.id);
+  const createTicketMutation = useCreateSupportTicket();
+  const rateFAQMutation = useRateFAQ();
+
+  const filteredFAQs = searchQuery
+    ? faqs.filter(
+        (faq) =>
+          faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : faqs;
+
+  const handleCreateTicket = () => {
+    if (!supportSubject.trim() || !supportMessage.trim()) {
+      return;
+    }
+
+    createTicketMutation.mutate(
+      {
+        subject: supportSubject.trim(),
+        category: supportCategory,
+        message: supportMessage.trim(),
+      },
+      {
+        onSuccess: () => {
+          setShowSupportForm(false);
+          setSupportSubject('');
+          setSupportMessage('');
+          setSupportCategory('other');
+        },
+      }
+    );
+  };
+
+  const handleRateFAQ = (faqId: string, isHelpful: boolean) => {
+    rateFAQMutation.mutate({ faqId, isHelpful });
+  };
+
+  const openEmail = () => {
+    Linking.openURL('mailto:support@taalmeet.com?subject=TaalMeet Support Request');
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background.primary }]} edges={['top']}>
@@ -50,22 +85,137 @@ export default function HelpSupportScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Contact Us */}
+        {/* Search */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text.muted }]}>CONTACT US</Text>
+          <View style={[styles.searchContainer, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
+            <Ionicons name="search" size={20} color={colors.text.muted} style={styles.searchIcon} />
+            <TextInput
+              style={[styles.searchInput, { color: colors.text.primary }]}
+              placeholder="Search FAQs..."
+              placeholderTextColor={colors.text.muted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={20} color={colors.text.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Contact Support */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text.muted }]}>CONTACT SUPPORT</Text>
           <View style={[styles.sectionContent, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
-            <TouchableOpacity style={styles.contactRow}>
+            <TouchableOpacity
+              style={styles.contactRow}
+              onPress={() => setShowSupportForm(!showSupportForm)}
+            >
               <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
                 <Ionicons name="chatbubble" size={20} color={colors.primary} />
               </View>
               <View style={styles.contactText}>
-                <Text style={[styles.contactTitle, { color: colors.text.primary }]}>Live Chat</Text>
-                <Text style={[styles.contactSubtitle, { color: colors.text.muted }]}>Chat with our support team</Text>
+                <Text style={[styles.contactTitle, { color: colors.text.primary }]}>Create Support Ticket</Text>
+                <Text style={[styles.contactSubtitle, { color: colors.text.muted }]}>
+                  {tickets.length > 0 ? `${tickets.length} active ticket${tickets.length > 1 ? 's' : ''}` : 'Get help from our team'}
+                </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.text.muted} />
+              <Ionicons
+                name={showSupportForm ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color={colors.text.muted}
+              />
             </TouchableOpacity>
+
+            {showSupportForm && (
+              <View style={[styles.supportForm, { borderTopColor: colors.border.default }]}>
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.text.primary }]}>Subject</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background.primary, borderColor: colors.border.default, color: colors.text.primary }]}
+                    placeholder="What can we help you with?"
+                    placeholderTextColor={colors.text.muted}
+                    value={supportSubject}
+                    onChangeText={setSupportSubject}
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.text.primary }]}>Category</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryContainer}>
+                    {[
+                      { value: 'account', label: 'Account' },
+                      { value: 'technical', label: 'Technical' },
+                      { value: 'billing', label: 'Billing' },
+                      { value: 'safety', label: 'Safety' },
+                      { value: 'feature_request', label: 'Feature' },
+                      { value: 'bug_report', label: 'Bug' },
+                      { value: 'other', label: 'Other' },
+                    ].map((cat) => (
+                      <TouchableOpacity
+                        key={cat.value}
+                        style={[
+                          styles.categoryChip,
+                          {
+                            backgroundColor: supportCategory === cat.value ? colors.primary : colors.background.primary,
+                            borderColor: colors.border.default,
+                          },
+                        ]}
+                        onPress={() => setSupportCategory(cat.value as any)}
+                      >
+                        <Text
+                          style={[
+                            styles.categoryChipText,
+                            { color: supportCategory === cat.value ? '#fff' : colors.text.primary },
+                          ]}
+                        >
+                          {cat.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.text.primary }]}>Message</Text>
+                  <TextInput
+                    style={[
+                      styles.textArea,
+                      { backgroundColor: colors.background.primary, borderColor: colors.border.default, color: colors.text.primary },
+                    ]}
+                    placeholder="Describe your issue in detail..."
+                    placeholderTextColor={colors.text.muted}
+                    value={supportMessage}
+                    onChangeText={setSupportMessage}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.submitButton,
+                    {
+                      backgroundColor: colors.primary,
+                      opacity: !supportSubject.trim() || !supportMessage.trim() || createTicketMutation.isPending ? 0.5 : 1,
+                    },
+                  ]}
+                  onPress={handleCreateTicket}
+                  disabled={!supportSubject.trim() || !supportMessage.trim() || createTicketMutation.isPending}
+                >
+                  {createTicketMutation.isPending ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>Submit Ticket</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
             <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
-            <TouchableOpacity style={styles.contactRow}>
+            <TouchableOpacity style={styles.contactRow} onPress={openEmail}>
               <View style={[styles.iconContainer, { backgroundColor: '#5FB3B320' }]}>
                 <Ionicons name="mail" size={20} color="#5FB3B3" />
               </View>
@@ -80,70 +230,69 @@ export default function HelpSupportScreen() {
 
         {/* FAQs */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text.muted }]}>FREQUENTLY ASKED QUESTIONS</Text>
-          <View style={styles.faqList}>
-            {faqs.map((faq, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[styles.faqItem, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}
-                onPress={() => setExpandedFaq(expandedFaq === index ? null : index)}
-              >
-                <View style={styles.faqHeader}>
-                  <View style={[styles.faqIcon, { backgroundColor: '#E91E8C20' }]}>
-                    <Ionicons name="help-circle" size={18} color="#E91E8C" />
-                  </View>
-                  <Text style={[styles.faqQuestion, { color: colors.text.primary }]}>{faq.question}</Text>
-                  <Ionicons
-                    name={expandedFaq === index ? 'chevron-up' : 'chevron-down'}
-                    size={20}
-                    color={colors.text.muted}
-                  />
+          <Text style={[styles.sectionTitle, { color: colors.text.muted }]}>
+            FREQUENTLY ASKED QUESTIONS {faqs.length > 0 && `(${filteredFAQs.length})`}
+          </Text>
+          {faqsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : filteredFAQs.length === 0 ? (
+            <View style={[styles.emptyState, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
+              <Ionicons name="help-circle-outline" size={48} color={colors.text.muted} />
+              <Text style={[styles.emptyStateText, { color: colors.text.muted }]}>
+                {searchQuery ? 'No FAQs found matching your search' : 'No FAQs available'}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.faqList}>
+              {filteredFAQs.map((faq) => (
+                <View
+                  key={faq.id}
+                  style={[styles.faqItem, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}
+                >
+                  <TouchableOpacity
+                    style={styles.faqHeader}
+                    onPress={() => setExpandedFaq(expandedFaq === faq.id ? null : faq.id)}
+                  >
+                    <View style={[styles.faqIcon, { backgroundColor: '#E91E8C20' }]}>
+                      <Ionicons name="help-circle" size={18} color="#E91E8C" />
+                    </View>
+                    <Text style={[styles.faqQuestion, { color: colors.text.primary }]}>{faq.question}</Text>
+                    <Ionicons
+                      name={expandedFaq === faq.id ? 'chevron-up' : 'chevron-down'}
+                      size={20}
+                      color={colors.text.muted}
+                    />
+                  </TouchableOpacity>
+                  {expandedFaq === faq.id && (
+                    <View style={styles.faqContent}>
+                      <Text style={[styles.faqAnswer, { color: colors.text.muted }]}>{faq.answer}</Text>
+                      <View style={styles.faqFeedback}>
+                        <Text style={[styles.faqFeedbackText, { color: colors.text.muted }]}>Was this helpful?</Text>
+                        <View style={styles.faqFeedbackButtons}>
+                          <TouchableOpacity
+                            style={[styles.faqFeedbackButton, { backgroundColor: colors.background.primary }]}
+                            onPress={() => handleRateFAQ(faq.id, true)}
+                          >
+                            <Ionicons name="thumbs-up" size={16} color={colors.text.primary} />
+                            <Text style={[styles.faqFeedbackButtonText, { color: colors.text.primary }]}>Yes</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.faqFeedbackButton, { backgroundColor: colors.background.primary }]}
+                            onPress={() => handleRateFAQ(faq.id, false)}
+                          >
+                            <Ionicons name="thumbs-down" size={16} color={colors.text.primary} />
+                            <Text style={[styles.faqFeedbackButtonText, { color: colors.text.primary }]}>No</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  )}
                 </View>
-                {expandedFaq === index && (
-                  <Text style={[styles.faqAnswer, { color: colors.text.muted }]}>{faq.answer}</Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Resources */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text.muted }]}>RESOURCES</Text>
-          <View style={[styles.sectionContent, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
-            <TouchableOpacity style={styles.contactRow}>
-              <View style={[styles.iconContainer, { backgroundColor: '#F59E0B20' }]}>
-                <Ionicons name="document-text" size={20} color="#F59E0B" />
-              </View>
-              <View style={styles.contactText}>
-                <Text style={[styles.contactTitle, { color: colors.text.primary }]}>User Guide</Text>
-                <Text style={[styles.contactSubtitle, { color: colors.text.muted }]}>Learn how to use TaalMeet</Text>
-              </View>
-              <Ionicons name="open-outline" size={20} color={colors.text.muted} />
-            </TouchableOpacity>
-            <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
-            <TouchableOpacity style={styles.contactRow}>
-              <View style={[styles.iconContainer, { backgroundColor: '#8B5CF620' }]}>
-                <Ionicons name="shield-checkmark" size={20} color="#8B5CF6" />
-              </View>
-              <View style={styles.contactText}>
-                <Text style={[styles.contactTitle, { color: colors.text.primary }]}>Safety Tips</Text>
-                <Text style={[styles.contactSubtitle, { color: colors.text.muted }]}>Stay safe while learning</Text>
-              </View>
-              <Ionicons name="open-outline" size={20} color={colors.text.muted} />
-            </TouchableOpacity>
-            <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
-            <TouchableOpacity style={styles.contactRow}>
-              <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}20` }]}>
-                <Ionicons name="people" size={20} color={colors.primary} />
-              </View>
-              <View style={styles.contactText}>
-                <Text style={[styles.contactTitle, { color: colors.text.primary }]}>Community Guidelines</Text>
-                <Text style={[styles.contactSubtitle, { color: colors.text.muted }]}>Our community standards</Text>
-              </View>
-              <Ionicons name="open-outline" size={20} color={colors.text.muted} />
-            </TouchableOpacity>
-          </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* App Info */}
@@ -195,6 +344,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+  },
   contactRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -223,17 +387,70 @@ const styles = StyleSheet.create({
     height: 1,
     marginLeft: 68,
   },
+  supportForm: {
+    padding: 16,
+    borderTopWidth: 1,
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  input: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+  },
+  textArea: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    minHeight: 100,
+  },
+  categoryContainer: {
+    flexDirection: 'row',
+  },
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  submitButton: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   faqList: {
     gap: 12,
   },
   faqItem: {
     borderRadius: 16,
     borderWidth: 1,
-    padding: 16,
+    overflow: 'hidden',
   },
   faqHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 16,
   },
   faqIcon: {
     width: 32,
@@ -248,11 +465,56 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  faqContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
   faqAnswer: {
     fontSize: 14,
     lineHeight: 20,
-    marginTop: 12,
+    marginBottom: 12,
     marginLeft: 44,
+  },
+  faqFeedback: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginLeft: 44,
+    marginTop: 8,
+  },
+  faqFeedbackText: {
+    fontSize: 12,
+  },
+  faqFeedbackButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  faqFeedbackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 4,
+  },
+  faqFeedbackButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  loadingContainer: {
+    padding: 32,
+    alignItems: 'center',
+  },
+  emptyState: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 32,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    marginTop: 12,
+    textAlign: 'center',
   },
   appInfo: {
     borderRadius: 16,
@@ -268,4 +530,3 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
-

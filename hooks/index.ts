@@ -50,3 +50,6 @@ export * from './useGamification';
 
 // Push Notifications Hooks
 export * from './useNotifications';
+
+// Help & Support Hooks
+export * from './useHelp';
