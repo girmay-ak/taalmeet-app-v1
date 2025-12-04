@@ -47,6 +47,7 @@ export async function translateText(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
         q: text,
@@ -60,7 +61,21 @@ export async function translateText(
       throw new Error(`Translation API error: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    // Check if response is actually JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('API returned non-JSON response');
+    }
+
+    const textResponse = await response.text();
+    let data;
+    
+    try {
+      data = JSON.parse(textResponse);
+    } catch (parseError) {
+      // If JSON parse fails, the API might have returned HTML or an error page
+      throw new Error('Failed to parse JSON response');
+    }
 
     return {
       translatedText: data.translatedText || text,
@@ -68,7 +83,9 @@ export async function translateText(
       confidence: data.detectedLanguage?.confidence,
     };
   } catch (error) {
-    console.error('Translation error:', error);
+    if (__DEV__) {
+      console.warn('Translation error (returning original text):', error);
+    }
     // Fallback: return original text if translation fails
     return {
       translatedText: text,
@@ -85,6 +102,7 @@ export async function detectLanguage(text: string): Promise<LanguageDetectionRes
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
         q: text,
@@ -95,7 +113,22 @@ export async function detectLanguage(text: string): Promise<LanguageDetectionRes
       throw new Error(`Language detection API error: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    // Check if response is actually JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('API returned non-JSON response');
+    }
+
+    const textResponse = await response.text();
+    let data;
+    
+    try {
+      data = JSON.parse(textResponse);
+    } catch (parseError) {
+      // If JSON parse fails, the API might have returned HTML or an error page
+      throw new Error('Failed to parse JSON response');
+    }
+
     const detection = Array.isArray(data) ? data[0] : data;
 
     return {
@@ -103,7 +136,9 @@ export async function detectLanguage(text: string): Promise<LanguageDetectionRes
       confidence: detection.confidence || 0,
     };
   } catch (error) {
-    console.error('Language detection error:', error);
+    if (__DEV__) {
+      console.warn('Language detection error (assuming English):', error);
+    }
     // Fallback: assume English
     return {
       language: 'en',
@@ -117,16 +152,46 @@ export async function detectLanguage(text: string): Promise<LanguageDetectionRes
  */
 export async function getSupportedLanguages(): Promise<Array<{ code: string; name: string }>> {
   try {
-    const response = await fetch('https://libretranslate.de/languages');
+    const response = await fetch('https://libretranslate.de/languages', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
 
     if (!response.ok) {
       throw new Error(`Languages API error: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    return data || [];
+    // Check if response is actually JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('API returned non-JSON response');
+    }
+
+    const text = await response.text();
+    let data;
+    
+    try {
+      data = JSON.parse(text);
+    } catch (parseError) {
+      // If JSON parse fails, the API might have returned HTML or an error page
+      throw new Error('Failed to parse JSON response');
+    }
+
+    // Validate the response is an array
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    // If not an array, return fallback
+    throw new Error('Invalid response format');
   } catch (error) {
-    console.error('Get languages error:', error);
+    // Log error but don't throw - return fallback instead
+    if (__DEV__) {
+      console.warn('Get languages error (using fallback):', error);
+    }
+    
     // Fallback: return common languages
     return [
       { code: 'en', name: 'English' },
@@ -139,6 +204,11 @@ export async function getSupportedLanguages(): Promise<Array<{ code: string; nam
       { code: 'ja', name: 'Japanese' },
       { code: 'zh', name: 'Chinese' },
       { code: 'ko', name: 'Korean' },
+      { code: 'ru', name: 'Russian' },
+      { code: 'ar', name: 'Arabic' },
+      { code: 'hi', name: 'Hindi' },
+      { code: 'tr', name: 'Turkish' },
+      { code: 'pl', name: 'Polish' },
     ];
   }
 }
