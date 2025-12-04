@@ -3,7 +3,7 @@
  * User profile with stats, languages, and settings
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -25,13 +25,23 @@ import { useSignOut } from '@/hooks/useAuth';
 import { getLanguageFlag } from '@/utils/languageFlags';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAvailability } from '@/hooks/useAvailability';
+import { EditProfileModal } from '@/components/profile/EditProfileModal';
+import { ChangePasswordModal } from '@/components/profile/ChangePasswordModal';
+import { useUpdateProfile } from '@/hooks/useProfile';
+import { useChangePassword } from '@/hooks/usePassword';
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
   const { profile, loading } = useAuth();
   const { data: currentUser } = useCurrentUser();
   const signOutMutation = useSignOut();
-  
+  const updateProfileMutation = useUpdateProfile();
+  const changePasswordMutation = useChangePassword();
+
+  // Modal states
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+
   // Get availability status
   const userId = currentUser?.id;
   const { data: availability } = useAvailability(userId);
@@ -72,7 +82,10 @@ export default function ProfileScreen() {
         {/* Header */}
         <View style={[styles.header, { backgroundColor: colors.background.secondary }]}>
           <Text style={[styles.headerTitle, { color: colors.text.primary }]}>Profile</Text>
-          <TouchableOpacity style={styles.settingsButton}>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => router.push('/settings')}
+          >
             <Ionicons name="settings-outline" size={24} color={colors.text.primary} />
           </TouchableOpacity>
         </View>
@@ -86,7 +99,9 @@ export default function ProfileScreen() {
           <View style={styles.avatarContainer}>
             <Image
               source={{ 
-                uri: profile.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400'
+                uri: (profile.avatarUrl && profile.avatarUrl.trim() !== '') 
+                  ? profile.avatarUrl 
+                  : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400'
               }}
               style={[styles.avatar, { borderColor: colors.border.default }]}
             />
@@ -114,12 +129,15 @@ export default function ProfileScreen() {
 
           {/* Stats - Placeholder for future implementation */}
           <View style={styles.statsRow}>
-            <View style={styles.statItem}>
+            <TouchableOpacity
+              style={styles.statItem}
+              onPress={() => router.push('/connections')}
+            >
               <Text style={[styles.statValue, { color: colors.text.primary }]}>0</Text>
               <Text style={[styles.statLabel, { color: colors.text.muted }]}>
                 Connections
               </Text>
-            </View>
+            </TouchableOpacity>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: colors.text.primary }]}>0</Text>
               <Text style={[styles.statLabel, { color: colors.text.muted }]}>
@@ -141,7 +159,7 @@ export default function ProfileScreen() {
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={[styles.editButton, { backgroundColor: colors.primary }]}
-              onPress={() => router.push('/profile/edit')}
+              onPress={() => setShowEditProfileModal(true)}
             >
               <Ionicons name="pencil" size={18} color="#FFFFFF" />
               <Text style={styles.editButtonText}>Edit Profile</Text>
@@ -153,7 +171,11 @@ export default function ProfileScreen() {
         </LinearGradient>
 
         {/* Gamification Card */}
-        <TouchableOpacity style={styles.gamificationCard} activeOpacity={0.9}>
+        <TouchableOpacity
+          style={styles.gamificationCard}
+          activeOpacity={0.9}
+          onPress={() => router.push('/gamification')}
+        >
           <LinearGradient
             colors={[colors.primary, '#1ED760', '#5FB3B3']}
             start={{ x: 0, y: 0 }}
@@ -190,11 +212,36 @@ export default function ProfileScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
+        {/* Verification Banner */}
+        {!(profile as any).verified && (
+          <View style={[styles.verificationBanner, { backgroundColor: `${colors.primary}20`, borderColor: colors.primary }]}>
+            <View style={styles.verificationBannerContent}>
+              <View style={[styles.verificationIcon, { backgroundColor: `${colors.primary}20` }]}>
+                <Ionicons name="shield-checkmark" size={24} color={colors.primary} />
+              </View>
+              <View style={styles.verificationText}>
+                <Text style={[styles.verificationTitle, { color: colors.text.primary }]}>
+                  Verify Your Profile
+                </Text>
+                <Text style={[styles.verificationSubtitle, { color: colors.text.muted }]}>
+                  Get verified badge and build trust with partners
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.verificationButton, { backgroundColor: colors.primary }]}
+                onPress={() => router.push('/profile/verification')}
+              >
+                <Text style={styles.verificationButtonText}>Verify</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* About Section */}
         <View style={[styles.section, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>About</Text>
-            <TouchableOpacity onPress={() => router.push('/profile/edit')}>
+            <TouchableOpacity onPress={() => setShowEditProfileModal(true)}>
               <Text style={[styles.editLink, { color: colors.primary }]}>Edit</Text>
             </TouchableOpacity>
           </View>
@@ -236,7 +283,7 @@ export default function ProfileScreen() {
               <View style={[styles.languageCard, { backgroundColor: colors.background.primary }]}>
                 <Text style={[styles.emptyLanguageText, { color: colors.text.muted }]}>
                   No teaching languages set
-                </Text>
+                  </Text>
               </View>
             )}
           </View>
@@ -265,7 +312,7 @@ export default function ProfileScreen() {
               <View style={[styles.languageCard, { backgroundColor: colors.background.primary }]}>
                 <Text style={[styles.emptyLanguageText, { color: colors.text.muted }]}>
                   No learning languages set
-                </Text>
+                  </Text>
               </View>
             )}
           </View>
@@ -282,14 +329,14 @@ export default function ProfileScreen() {
           <View style={styles.interestsGrid}>
             {profile.interests && profile.interests.length > 0 ? (
               profile.interests.map((interest, index) => (
-                <View
-                  key={index}
-                  style={[styles.interestChip, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}
-                >
-                  <Text style={[styles.interestText, { color: colors.text.muted }]}>
-                    {interest}
-                  </Text>
-                </View>
+              <View
+                key={index}
+                style={[styles.interestChip, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}
+              >
+                <Text style={[styles.interestText, { color: colors.text.muted }]}>
+                  {interest}
+                </Text>
+              </View>
               ))
             ) : (
               <Text style={[styles.emptyInterestsText, { color: colors.text.muted }]}>
@@ -299,7 +346,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-          {/* Availability Section */}
+        {/* Availability Section */}
         <View style={[styles.section, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Availability</Text>
@@ -317,27 +364,43 @@ export default function ProfileScreen() {
               </Text>
             </View>
             {availability?.weeklySchedule && availability.weeklySchedule.length > 0 && (
-              <View style={styles.scheduleRow}>
-                <Ionicons name="calendar-outline" size={16} color={colors.text.muted} />
-                <Text style={[styles.scheduleText, { color: colors.text.muted }]}>
+            <View style={styles.scheduleRow}>
+              <Ionicons name="calendar-outline" size={16} color={colors.text.muted} />
+              <Text style={[styles.scheduleText, { color: colors.text.muted }]}>
                   {availability.weeklySchedule.length} schedule slot{availability.weeklySchedule.length !== 1 ? 's' : ''} set
-                </Text>
-              </View>
+              </Text>
+            </View>
             )}
           </View>
         </View>
 
         {/* Account Actions */}
         <View style={[styles.section, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
-          <TouchableOpacity style={[styles.menuItem, { borderBottomColor: colors.border.default }]}>
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: colors.border.default }]}
+            onPress={() => router.push('/language-preferences')}
+          >
             <Text style={[styles.menuText, { color: colors.text.primary }]}>Language Preferences</Text>
             <Ionicons name="chevron-forward" size={20} color={colors.text.muted} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.menuItem, { borderBottomColor: colors.border.default }]}>
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: colors.border.default }]}
+            onPress={() => setShowChangePasswordModal(true)}
+          >
+            <Text style={[styles.menuText, { color: colors.text.primary }]}>Change Password</Text>
+            <Ionicons name="chevron-forward" size={20} color={colors.text.muted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: colors.border.default }]}
+            onPress={() => router.push('/privacy')}
+          >
             <Text style={[styles.menuText, { color: colors.text.primary }]}>Privacy & Safety</Text>
             <Ionicons name="chevron-forward" size={20} color={colors.text.muted} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.menuItem, { borderBottomColor: colors.border.default }]}>
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: colors.border.default }]}
+            onPress={() => router.push('/help')}
+          >
             <Text style={[styles.menuText, { color: colors.text.primary }]}>Help & Support</Text>
             <Ionicons name="chevron-forward" size={20} color={colors.text.muted} />
           </TouchableOpacity>
@@ -350,6 +413,34 @@ export default function ProfileScreen() {
         {/* Bottom Padding */}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Edit Profile Modal */}
+      {profile && (
+        <EditProfileModal
+          isVisible={showEditProfileModal}
+          onClose={() => setShowEditProfileModal(false)}
+          profile={{
+            id: profile.id,
+            display_name: profile.displayName,
+            avatar_url: profile.avatarUrl,
+            bio: profile.bio || null,
+            city: profile.city || null,
+            country: profile.country || null,
+          }}
+          onSave={async (data) => {
+            await updateProfileMutation.mutateAsync(data);
+          }}
+        />
+      )}
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isVisible={showChangePasswordModal}
+        onClose={() => setShowChangePasswordModal(false)}
+        onSave={async (data) => {
+          await changePasswordMutation.mutateAsync(data.newPassword);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -647,5 +738,46 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     padding: 8,
+  },
+  verificationBanner: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  verificationBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  verificationIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  verificationText: {
+    flex: 1,
+  },
+  verificationTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  verificationSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  verificationButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  verificationButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

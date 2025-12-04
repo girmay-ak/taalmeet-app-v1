@@ -31,13 +31,29 @@ export function useConversations() {
   const { data: currentUser } = useCurrentUser();
   const userId = currentUser?.id;
 
-  return useQuery({
+  const query = useQuery({
     queryKey: messageKeys.conversations(userId || ''),
-    queryFn: () => (userId ? messagesService.getConversations(userId) : []),
+    queryFn: () => {
+      console.log('[useConversations] Query function called, userId:', userId);
+      return userId ? messagesService.getConversations(userId) : [];
+    },
     enabled: !!userId,
     staleTime: 30 * 1000, // 30 seconds
     refetchInterval: 60 * 1000, // Refetch every minute for real-time feel
   });
+
+  // Log query state changes
+  console.log('[useConversations] Query state:', {
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    data: query.data,
+    dataLength: query.data?.length,
+    userId,
+    enabled: !!userId,
+  });
+
+  return query;
 }
 
 /**
@@ -45,13 +61,29 @@ export function useConversations() {
  * Returns messages sorted by created_at ascending (oldest first)
  */
 export function useMessages(conversationId: string | undefined) {
-  return useQuery({
+  const query = useQuery({
     queryKey: messageKeys.messages(conversationId || ''),
-    queryFn: () => (conversationId ? messagesService.getMessages(conversationId) : []),
+    queryFn: () => {
+      console.log('[useMessages] Query function called, conversationId:', conversationId);
+      return conversationId ? messagesService.getMessages(conversationId) : [];
+    },
     enabled: !!conversationId,
     staleTime: 10 * 1000, // 10 seconds
     refetchInterval: 30 * 1000, // Refetch every 30 seconds
   });
+
+  // Log query state changes
+  console.log('[useMessages] Query state:', {
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    data: query.data,
+    dataLength: query.data?.length,
+    conversationId,
+    enabled: !!conversationId,
+  });
+
+  return query;
 }
 
 // ============================================================================
@@ -87,8 +119,12 @@ export function useSendMessage() {
       }
     },
     onError: (error) => {
+      console.error('[useSendMessage] Error sending message:', error);
       const message = getUserFriendlyMessage(error);
       Alert.alert('Send Failed', message);
+    },
+    onSuccess: (data) => {
+      console.log('[useSendMessage] Message sent successfully:', data.id);
     },
   });
 }
@@ -116,8 +152,12 @@ export function useCreateConversation() {
       return conversationId;
     },
     onError: (error) => {
+      console.error('[useCreateConversation] Error creating conversation:', error);
       const message = getUserFriendlyMessage(error);
       Alert.alert('Create Failed', message);
+    },
+    onSuccess: (conversationId) => {
+      console.log('[useCreateConversation] Conversation created/found:', conversationId);
     },
   });
 }
@@ -146,8 +186,12 @@ export function useMarkAsRead() {
       queryClient.invalidateQueries({ queryKey: messageKeys.messages(conversationId) });
     },
     onError: (error) => {
+      console.error('[useMarkAsRead] Error marking as read:', error);
       const message = getUserFriendlyMessage(error);
       Alert.alert('Update Failed', message);
+    },
+    onSuccess: (_, conversationId) => {
+      console.log('[useMarkAsRead] Marked conversation as read:', conversationId);
     },
   });
 }

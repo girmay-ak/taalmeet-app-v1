@@ -27,6 +27,11 @@ export const ENABLE_PUSH_NOTIFICATIONS =
 export const SENTRY_DSN = process.env.SENTRY_DSN;
 export const MIXPANEL_TOKEN = process.env.MIXPANEL_TOKEN;
 
+// Eventbrite API
+export const EVENTBRITE_API_KEY = process.env.EXPO_PUBLIC_EVENTBRITE_API_KEY || 'FUPDHNPWHA5UVEGZYL';
+export const EVENTBRITE_PUBLIC_TOKEN = process.env.EXPO_PUBLIC_EVENTBRITE_PUBLIC_TOKEN || 'VK5VH2TIESVMBC2UHXWJ';
+export const EVENTBRITE_PRIVATE_TOKEN = process.env.EXPO_PUBLIC_EVENTBRITE_PRIVATE_TOKEN || 'JMMC4ILSKMGBPYTPMQEG';
+
 // App Info
 export const APP_NAME = process.env.APP_NAME || 'TaalMeet';
 export const NODE_ENV = process.env.NODE_ENV || 'development';

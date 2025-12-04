@@ -38,7 +38,9 @@ export default function EditProfileScreen() {
   const [bio, setBio] = useState(profile?.bio || '');
   const [city, setCity] = useState(profile?.city || '');
   const [country, setCountry] = useState(profile?.country || '');
-  const [avatarUri, setAvatarUri] = useState<string | null>(profile?.avatarUrl || null);
+  const [avatarUri, setAvatarUri] = useState<string | null>(
+    (profile?.avatarUrl && profile.avatarUrl.trim() !== '') ? profile.avatarUrl : null
+  );
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -49,7 +51,7 @@ export default function EditProfileScreen() {
       setBio(profile.bio || '');
       setCity(profile.city || '');
       setCountry(profile.country || '');
-      setAvatarUri(profile.avatarUrl || null);
+      setAvatarUri((profile.avatarUrl && profile.avatarUrl.trim() !== '') ? profile.avatarUrl : null);
     }
   }, [profile]);
 
@@ -125,30 +127,40 @@ export default function EditProfileScreen() {
       if (avatarUri && avatarUri !== profile.avatarUrl && !avatarUri.startsWith('http')) {
         setIsUploadingAvatar(true);
         try {
+          console.log('[EditProfile] Uploading avatar:', { userId: profile.id, avatarUri });
           const uploadResult = await storageService.uploadAvatar(profile.id, avatarUri);
           avatarUrl = uploadResult.publicUrl;
+          console.log('[EditProfile] Avatar uploaded successfully:', avatarUrl);
           logger.info('USER', 'Avatar uploaded', {
             userId: profile.id,
             action: 'avatar_upload',
           });
         } catch (error: any) {
-          console.error('Avatar upload error:', error);
+          console.error('[EditProfile] Avatar upload error:', error);
           Alert.alert('Upload Error', 'Failed to upload avatar. Profile will be saved without new avatar.');
         } finally {
           setIsUploadingAvatar(false);
         }
+      } else if (avatarUri && avatarUri.startsWith('http')) {
+        // Avatar is already a URL (from previous upload or external source)
+        avatarUrl = avatarUri;
+        console.log('[EditProfile] Using existing avatar URL:', avatarUrl);
       }
 
       // Update profile
+      const updateData = {
+        displayName: displayName.trim(),
+        bio: bio.trim() || null,
+        city: city.trim() || null,
+        country: country.trim() || null,
+        avatarUrl: (avatarUrl && avatarUrl.trim() !== '') ? avatarUrl : null,
+      };
+      
+      console.log('[EditProfile] Updating profile with data:', { ...updateData, avatarUrl: updateData.avatarUrl ? 'SET' : 'NULL' });
+      
       await updateProfileMutation.mutateAsync({
         userId: profile.id,
-        data: {
-          displayName: displayName.trim(),
-          bio: bio.trim() || null,
-          city: city.trim() || null,
-          country: country.trim() || null,
-          avatarUrl: avatarUrl || null,
-        },
+        data: updateData,
       });
 
       // Refresh profile in AuthProvider

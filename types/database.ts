@@ -71,6 +71,16 @@ export interface Database {
         Insert: DiscoveryPreferencesInsert;
         Update: DiscoveryPreferencesUpdate;
       };
+      blocked_users: {
+        Row: BlockedUser;
+        Insert: BlockedUserInsert;
+        Update: BlockedUserUpdate;
+      };
+      reports: {
+        Row: Report;
+        Insert: ReportInsert;
+        Update: ReportUpdate;
+      };
     };
   };
 }
@@ -507,5 +517,49 @@ export interface DiscoveryPreferencesUpdate {
   min_match_score?: number;
   meeting_type?: string[];
   preferred_levels?: string[];
+}
+
+// ============================================================================
+// BLOCKED_USERS TABLE
+// ============================================================================
+
+export interface BlockedUser {
+  id: string;
+  blocker_id: string;
+  blocked_id: string;
+  created_at: string;
+}
+
+export interface BlockedUserInsert {
+  blocker_id: string;
+  blocked_id: string;
+}
+
+export interface BlockedUserUpdate {
+  // No updates allowed (immutable)
+}
+
+// ============================================================================
+// REPORTS TABLE
+// ============================================================================
+
+export interface Report {
+  id: string;
+  reporter_id: string;
+  target_id: string;
+  reason: string;
+  message: string | null;
+  created_at: string;
+}
+
+export interface ReportInsert {
+  reporter_id: string;
+  target_id: string;
+  reason: string;
+  message?: string | null;
+}
+
+export interface ReportUpdate {
+  // No updates allowed (immutable)
 }
 

@@ -233,10 +233,10 @@ export default function AvailableScreen() {
           
           // Update location if we have coordinates
           if (locationToUse) {
-            await updateLocationMutation.mutateAsync({
+          await updateLocationMutation.mutateAsync({
               lat: locationToUse.latitude,
               lng: locationToUse.longitude,
-            });
+          });
           }
         } catch (error) {
           console.warn('Failed to update location:', error);

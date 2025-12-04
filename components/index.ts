@@ -18,6 +18,22 @@ export { ThemeToggle } from './ThemeToggle';
 
 // Animations (React Native Only)
 export { FlowingWavesRN } from './animations/FlowingWavesRN';
+export { ConfettiRN } from './animations/ConfettiRN';
+
+// Match Components
+export { MatchFoundPopup } from './matches/MatchFoundPopup';
+
+// Notification Components
+export { NotificationContainer } from './notifications/NotificationContainer';
+export { ConnectionNotificationComponent } from './notifications/ConnectionNotification';
+
+// Event Components
+export { EventCard } from './events/EventCard';
+export { EventHorizontalCard } from './events/EventHorizontalCard';
+
+// Profile Components
+export { EditProfileModal } from './profile/EditProfileModal';
+export { ChangePasswordModal } from './profile/ChangePasswordModal';
 
 // TODO: Fix these animations (use motion/react - web-only)
 // export { AnimatedGradient } from './animations/AnimatedGradient';
@@ -39,6 +55,9 @@ export { FlowingWavesRN } from './animations/FlowingWavesRN';
 // export { LogoutConfirmationModal } from './modals/LogoutConfirmationModal';
 // export { PremiumUpgradeModal } from './modals/PremiumUpgradeModal';
 // export { ReportIssueModal } from './modals/ReportIssueModal';
+
+// Safety Modals (React Native)
+export { ReportUserModal } from './modals/ReportUserModal';
 
 // Icons
 export * from './icons';

@@ -3,10 +3,15 @@ import { useAuth } from '@/providers';
 import { Ionicons } from '@expo/vector-icons';
 import { View, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/lib/theme/ThemeProvider';
+import { useConversations } from '@/hooks/useMessages';
 
 export default function TabsLayout() {
   const { session, loading } = useAuth();
   const { colors, mode } = useTheme();
+  
+  // Get unread message count for badge
+  const { data: conversations = [] } = useConversations();
+  const unreadCount = conversations.reduce((total, conv) => total + (conv.unreadCount || 0), 0);
 
   // Show loading while checking auth
   if (loading) {
@@ -75,7 +80,7 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="chatbubbles" size={size} color={color} />
           ),
-          tabBarBadge: 3,
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
           tabBarBadgeStyle: {
             backgroundColor: colors.primary,
             fontSize: 10,

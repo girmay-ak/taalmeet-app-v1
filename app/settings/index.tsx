@@ -187,7 +187,9 @@ export default function SettingsScreen() {
               iconColor="#5FB3B3"
               title="Change Password"
               subtitle="Update your password"
-              onPress={() => {}}
+              onPress={() => {
+                // TODO: Open change password modal
+              }}
               showArrow
             />
             <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
@@ -196,7 +198,16 @@ export default function SettingsScreen() {
               iconColor={colors.primary}
               title="Language"
               rightText="English"
-              onPress={() => {}}
+              onPress={() => router.push('/language-preferences')}
+              showArrow
+            />
+            <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
+            <SettingRow
+              icon="people-outline"
+              iconColor={colors.primary}
+              title="Connections"
+              subtitle="View your connections"
+              onPress={() => router.push('/connections')}
               showArrow
             />
             <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
@@ -205,7 +216,16 @@ export default function SettingsScreen() {
               iconColor="#E91E8C"
               title="Blocked Users"
               subtitle="Manage blocked users"
-              onPress={() => {}}
+              onPress={() => router.push('/privacy')}
+              showArrow
+            />
+            <View style={[styles.divider, { backgroundColor: colors.border.default }]} />
+            <SettingRow
+              icon="shield-checkmark"
+              iconColor={colors.primary}
+              title="Verify Profile"
+              subtitle="Get verified badge"
+              onPress={() => router.push('/profile/verification')}
               showArrow
             />
           </View>

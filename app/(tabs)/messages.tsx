@@ -30,7 +30,7 @@ export default function MessagesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch conversations from backend
-  const { data: conversations = [], isLoading, error } = useConversations();
+  const { data: conversations = [], isLoading, isError, error } = useConversations();
   const createConversationMutation = useCreateConversation();
   
   // Get discover feed to find users to chat with
@@ -80,16 +80,16 @@ export default function MessagesScreen() {
   };
 
   const tabs = [
-    { id: 'all' as TabType, label: 'All', count: conversations.length },
+    { id: 'all' as TabType, label: 'All', count: conversations?.length || 0 },
     {
       id: 'unread' as TabType,
       label: 'Unread',
-      count: conversations.filter((c) => c.unreadCount > 0).length,
+      count: (conversations || []).filter((c) => c.unreadCount > 0).length,
     },
     { id: 'archived' as TabType, label: 'Archived', count: 0 },
   ];
 
-  const filteredConversations = conversations.filter((conv) => {
+  const filteredConversations = (conversations || []).filter((conv) => {
     // Tab filter
     if (activeTab === 'unread' && conv.unreadCount === 0) return false;
     if (activeTab === 'archived') return false;
@@ -100,6 +100,16 @@ export default function MessagesScreen() {
     }
 
     return true;
+  });
+
+  // Debug logging (after filteredConversations is calculated)
+  console.log('[MessagesScreen] Render state:', {
+    isLoading,
+    isError,
+    error: error ? JSON.stringify(error, null, 2) : null,
+    conversationsCount: conversations?.length || 0,
+    conversations,
+    filteredCount: filteredConversations?.length || 0,
   });
 
   const renderConversation = (conversation: typeof conversations[0]) => (
@@ -116,7 +126,9 @@ export default function MessagesScreen() {
       <View style={styles.avatarContainer}>
         <Image 
           source={{ 
-            uri: conversation.otherUser.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' 
+            uri: (conversation.otherUser.avatarUrl && conversation.otherUser.avatarUrl.trim() !== '') 
+              ? conversation.otherUser.avatarUrl 
+              : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' 
           }} 
           style={styles.avatar} 
         />
@@ -140,7 +152,7 @@ export default function MessagesScreen() {
               styles.lastMessage,
               {
                 color: conversation.unreadCount > 0 ? colors.text.primary : colors.text.muted,
-                fontWeight: conversation.unreadCount > 0 ? '500' : '400',
+                fontWeight: conversation.unreadCount > 0 ? '600' : '400',
               },
             ]}
             numberOfLines={1}
@@ -174,7 +186,7 @@ export default function MessagesScreen() {
             {createConversationMutation.isPending ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Ionicons name="add" size={20} color="#FFFFFF" />
+            <Ionicons name="add" size={20} color="#FFFFFF" />
             )}
           </TouchableOpacity>
         </View>
@@ -247,7 +259,7 @@ export default function MessagesScreen() {
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.text.muted }]}>Loading conversations...</Text>
         </View>
-      ) : error ? (
+      ) : isError ? (
         <View style={styles.emptyState}>
           <View style={[styles.emptyIcon, { backgroundColor: colors.background.secondary }]}>
             <Ionicons name="alert-circle-outline" size={48} color={colors.text.muted} />
@@ -257,39 +269,37 @@ export default function MessagesScreen() {
             Please try again later
           </Text>
         </View>
+      ) : !conversations || conversations.length === 0 || filteredConversations.length === 0 ? (
+          <View style={styles.emptyState}>
+            <View style={[styles.emptyIcon, { backgroundColor: colors.background.secondary }]}>
+              <Ionicons name="chatbubbles-outline" size={48} color={colors.text.muted} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>
+            {activeTab === 'all' ? 'No conversations yet' : `No ${activeTab} messages`}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: colors.text.muted }]}>
+              {activeTab === 'all'
+                ? 'Start chatting with language partners'
+                : `You don't have any ${activeTab} messages`}
+            </Text>
+              <TouchableOpacity 
+                style={[styles.discoverButton, { backgroundColor: colors.primary }]}
+                onPress={() => router.push('/(tabs)')}
+              >
+                <Text style={styles.discoverButtonText}>Discover Language Partners</Text>
+              </TouchableOpacity>
+        </View>
       ) : (
         <ScrollView
           style={styles.conversationsList}
           contentContainerStyle={styles.conversationsContent}
           showsVerticalScrollIndicator={false}
         >
-          {filteredConversations.length > 0 ? (
-            <View style={[styles.conversationsContainer, { backgroundColor: colors.background.secondary }]}>
-              {filteredConversations.map(renderConversation)}
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <View style={[styles.emptyIcon, { backgroundColor: colors.background.secondary }]}>
-                <Ionicons name="chatbubbles-outline" size={48} color={colors.text.muted} />
-              </View>
-              <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>
-                {activeTab === 'all' ? 'No conversations yet' : `No ${activeTab} messages`}
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: colors.text.muted }]}>
-                {activeTab === 'all'
-                  ? 'Start chatting with language partners'
-                  : `You don't have any ${activeTab} messages`}
-              </Text>
-              <TouchableOpacity 
-                style={[styles.discoverButton, { backgroundColor: colors.primary }]}
-                onPress={() => router.push('/(tabs)')}
-              >
-                <Text style={styles.discoverButtonText}>Discover Partners</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          <View style={[styles.conversationsContainer, { backgroundColor: colors.background.secondary }]}>
+            {filteredConversations.map(renderConversation)}
+          </View>
         </ScrollView>
-      )}
+        )}
     </SafeAreaView>
   );
 }

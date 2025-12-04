@@ -3,7 +3,7 @@
  * Individual chat conversation with a partner
  */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,17 +22,21 @@ import { useTheme } from '@/lib/theme/ThemeProvider';
 import { useMessages, useSendMessage, useMarkAsRead } from '@/hooks/useMessages';
 import { useConversations } from '@/hooks/useMessages';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { ActivityIndicator } from 'react-native';
-import { useEffect } from 'react';
+import { useUserProfile } from '@/hooks/useUser';
+import { useIsBlocked, useBlockUser } from '@/hooks/useSafety';
+import { ReportUserModal } from '@/components/modals/ReportUserModal';
+import { ActivityIndicator, Alert } from 'react-native';
 
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const scrollViewRef = useRef<ScrollView>(null);
   const [message, setMessage] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   
   // Fetch messages from backend
-  const { data: messages = [], isLoading: messagesLoading } = useMessages(conversationId);
+  const { data: messages = [], isLoading: messagesLoading, isError: messagesError, error: messagesErrorObj } = useMessages(conversationId);
   const sendMessageMutation = useSendMessage();
   const markAsReadMutation = useMarkAsRead();
   const { data: currentUser } = useCurrentUser();
@@ -40,6 +44,26 @@ export default function ChatScreen() {
   // Get conversation info to find partner details
   const { data: conversations = [] } = useConversations();
   const conversation = conversations.find(c => c.id === conversationId);
+  
+  // Get partner profile for online status
+  const partnerId = conversation?.otherUser.id;
+  const { data: partnerProfile } = useUserProfile(partnerId);
+  
+  // Check if user is blocked
+  const { data: isBlocked = false } = useIsBlocked(currentUser?.id, partnerId);
+  const blockUserMutation = useBlockUser();
+
+  // Debug logging (only in development)
+  if (__DEV__) {
+    console.log('[ChatScreen] Render state:', {
+      conversationId,
+      messagesLoading,
+      messagesError,
+      messagesCount: messages?.length || 0,
+      currentUserId: currentUser?.id,
+      conversationFound: !!conversation,
+    });
+  }
   
   // Mark conversation as read when screen is focused
   useEffect(() => {
@@ -69,6 +93,38 @@ export default function ChatScreen() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Handle block user
+  const handleBlockUser = () => {
+    if (!partnerId) return;
+    
+    Alert.alert(
+      'Block User',
+      `Are you sure you want to block ${conversation?.otherUser.displayName || 'this user'}? You won't be able to see each other's messages or profiles.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockUserMutation.mutateAsync(partnerId);
+              setShowMenu(false);
+              router.back();
+            } catch (error) {
+              // Error handled by hook
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Handle report user
+  const handleReportUser = () => {
+    setShowMenu(false);
+    setShowReportModal(true);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background.primary }]} edges={['top']}>
       {/* Header */}
@@ -82,21 +138,25 @@ export default function ChatScreen() {
             style={styles.partnerInfo} 
             onPress={() => router.push(`/partner/${conversation.otherUser.id}`)}
           >
-            <View style={styles.avatarContainer}>
+          <View style={styles.avatarContainer}>
               <Image 
                 source={{ 
-                  uri: conversation.otherUser.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' 
+                  uri: (conversation.otherUser.avatarUrl && conversation.otherUser.avatarUrl.trim() !== '') 
+                    ? conversation.otherUser.avatarUrl 
+                    : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' 
                 }} 
                 style={styles.avatar} 
               />
-            </View>
-            <View style={styles.partnerText}>
+          </View>
+          <View style={styles.partnerText}>
               <Text style={[styles.partnerName, { color: colors.text.primary }]}>
                 {conversation.otherUser.displayName}
               </Text>
-              <Text style={[styles.partnerStatus, { color: '#4FD1C5' }]}>Active</Text>
-            </View>
-          </TouchableOpacity>
+              <Text style={[styles.partnerStatus, { color: partnerProfile?.is_online ? '#4FD1C5' : colors.text.muted }]}>
+                {partnerProfile?.is_online ? 'Active now' : 'Offline'}
+              </Text>
+          </View>
+        </TouchableOpacity>
         )}
 
         <View style={styles.headerActions}>
@@ -106,10 +166,33 @@ export default function ChatScreen() {
           <TouchableOpacity style={styles.headerButton}>
             <Ionicons name="videocam-outline" size={22} color={colors.text.primary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton}>
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={() => setShowMenu(!showMenu)}
+          >
             <Ionicons name="ellipsis-vertical" size={22} color={colors.text.primary} />
           </TouchableOpacity>
         </View>
+        
+        {/* Menu Dropdown */}
+        {showMenu && (
+          <View style={[styles.menuDropdown, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleReportUser}
+            >
+              <Ionicons name="flag-outline" size={20} color={colors.text.primary} />
+              <Text style={[styles.menuItemText, { color: colors.text.primary }]}>Report User</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.menuItem, styles.menuItemDanger]}
+              onPress={handleBlockUser}
+            >
+              <Ionicons name="ban-outline" size={20} color={colors.semantic.error} />
+              <Text style={[styles.menuItemText, { color: colors.semantic.error }]}>Block User</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Messages */}
@@ -118,122 +201,169 @@ export default function ChatScreen() {
         style={styles.keyboardView}
         keyboardVerticalOffset={0}
       >
-        {messagesLoading && messages.length === 0 ? (
+        {messagesLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={[styles.loadingText, { color: colors.text.muted }]}>Loading messages...</Text>
           </View>
-        ) : (
+        ) : messagesError ? (
+          <View style={styles.emptyContainer}>
+            <View style={[styles.emptyIcon, { backgroundColor: colors.background.secondary }]}>
+              <Ionicons name="alert-circle-outline" size={48} color={colors.text.muted} />
+            </View>
+            <Text style={[styles.emptyText, { color: colors.text.primary }]}>
+              Error loading messages
+            </Text>
+            <Text style={[styles.emptySubtext, { color: colors.text.muted }]}>
+              Please try again later
+            </Text>
+          </View>
+        ) : !messages || messages.length === 0 ? (
           <ScrollView
             ref={scrollViewRef}
             style={styles.messagesContainer}
             contentContainerStyle={styles.messagesContent}
             showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: false })}
           >
-            {/* Date Divider */}
-            {messages.length > 0 && (
-              <View style={styles.dateDivider}>
-                <View style={[styles.dateBadge, { backgroundColor: colors.background.secondary }]}>
-                  <Text style={[styles.dateText, { color: colors.text.muted }]}>Today</Text>
-                </View>
+            <View style={styles.emptyContainer}>
+              <View style={[styles.emptyIcon, { backgroundColor: colors.background.secondary }]}>
+                <Ionicons name="chatbubble-outline" size={48} color={colors.text.muted} />
               </View>
-            )}
-
-            {/* Messages */}
-            {messages.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <View style={[styles.emptyIcon, { backgroundColor: colors.background.secondary }]}>
-                  <Ionicons name="chatbubble-outline" size={48} color={colors.text.muted} />
-                </View>
-                <Text style={[styles.emptyText, { color: colors.text.primary }]}>
-                  No messages yet
-                </Text>
-                <Text style={[styles.emptySubtext, { color: colors.text.muted }]}>
-                  Start the conversation!
-                </Text>
-              </View>
-            ) : (
-              messages.map((msg) => {
-                const isMyMessage = msg.sender_id === currentUser?.id;
-                return (
-                  <View
-                    key={msg.id}
-                    style={[styles.messageRow, isMyMessage ? styles.sentRow : styles.receivedRow]}
-                  >
-                    {!isMyMessage && conversation && (
-                      <Image 
-                        source={{ 
-                          uri: conversation.otherUser.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' 
-                        }} 
-                        style={styles.messageAvatar} 
-                      />
-                    )}
-                    <View style={styles.messageContent}>
-                      <View
-                        style={[
-                          styles.messageBubble,
-                          isMyMessage
-                            ? [styles.sentBubble, { backgroundColor: colors.primary }]
-                            : [styles.receivedBubble, { backgroundColor: colors.background.secondary }],
-                        ]}
-                      >
-                        <Text style={[styles.messageText, { color: isMyMessage ? '#FFFFFF' : colors.text.primary }]}>
-                          {msg.content}
-                        </Text>
-                      </View>
-
-                      {/* Message Actions */}
-                      <View style={[styles.messageActions, isMyMessage ? styles.sentActions : styles.receivedActions]}>
-                        <Text style={[styles.timestamp, { color: colors.text.muted }]}>
-                          {formatTime(msg.created_at)}
-                        </Text>
-                        {isMyMessage && msg.is_read && (
-                          <Ionicons name="checkmark-done" size={14} color={colors.text.muted} />
-                        )}
-                      </View>
-                    </View>
-                  </View>
-                );
-              })
-            )}
+              <Text style={[styles.emptyText, { color: colors.text.primary }]}>
+                Say hi and start the conversation
+              </Text>
+            </View>
           </ScrollView>
-        )}
-
-        {/* Input Bar */}
-        <View style={[styles.inputBar, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
-          <TouchableOpacity style={styles.inputAction}>
-            <Ionicons name="add" size={24} color={colors.text.muted} />
-          </TouchableOpacity>
-
-          <View style={[styles.inputContainer, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}>
-            <TextInput
-              style={[styles.input, { color: colors.text.primary }]}
-              placeholder="Message..."
-              placeholderTextColor={colors.text.muted}
-              value={message}
-              onChangeText={setMessage}
-              multiline
-              maxLength={1000}
-            />
-            <TouchableOpacity style={styles.emojiButton}>
-              <Ionicons name="happy-outline" size={22} color={colors.text.muted} />
-            </TouchableOpacity>
+        ) : (
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.messagesContainer}
+          contentContainerStyle={styles.messagesContent}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: false })}
+        >
+          {/* Date Divider */}
+          <View style={styles.dateDivider}>
+            <View style={[styles.dateBadge, { backgroundColor: colors.background.secondary }]}>
+              <Text style={[styles.dateText, { color: colors.text.muted }]}>Today</Text>
+            </View>
           </View>
 
-          <TouchableOpacity
-            onPress={handleSend}
-            style={[styles.sendButton, { backgroundColor: message.trim() ? colors.primary : colors.border.default }]}
-            disabled={!message.trim() || sendMessageMutation.isPending}
-          >
-            {sendMessageMutation.isPending ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
+          {/* Messages */}
+            {messages.map((msg) => {
+              const isMyMessage = msg.sender_id === currentUser?.id;
+              return (
+            <View
+              key={msg.id}
+              style={[styles.messageRow, isMyMessage ? styles.sentRow : styles.receivedRow]}
+            >
+              {!isMyMessage && conversation && (
+                <Image 
+                  source={{ 
+                    uri: (conversation.otherUser.avatarUrl && conversation.otherUser.avatarUrl.trim() !== '') 
+                      ? conversation.otherUser.avatarUrl 
+                      : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' 
+                  }} 
+                  style={styles.messageAvatar} 
+                />
+              )}
+              <View style={styles.messageContent}>
+                <View
+                  style={[
+                    styles.messageBubble,
+                    isMyMessage
+                      ? [styles.sentBubble, { backgroundColor: colors.primary }]
+                      : [styles.receivedBubble, { backgroundColor: colors.background.secondary }],
+                  ]}
+                >
+                  <Text style={[styles.messageText, { color: isMyMessage ? '#FFFFFF' : colors.text.primary }]}>
+                    {msg.content}
+                  </Text>
+                </View>
+
+                {/* Message Actions */}
+                <View style={[styles.messageActions, isMyMessage ? styles.sentActions : styles.receivedActions]}>
+                  <Text style={[styles.timestamp, { color: colors.text.muted }]}>
+                    {formatTime(msg.created_at)}
+                  </Text>
+                  {!isMyMessage && (
+                    <>
+                      <TouchableOpacity style={styles.actionButton}>
+                        <Ionicons name="language-outline" size={14} color={colors.text.muted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.actionButton}>
+                        <Ionicons name="volume-high-outline" size={14} color={colors.text.muted} />
+                      </TouchableOpacity>
+                    </>
+                  )}
+                  {isMyMessage && msg.is_read && (
+                    <Ionicons name="checkmark-done" size={14} color={colors.text.muted} />
+                  )}
+                </View>
+              </View>
+            </View>
+              );
+            })}
+        </ScrollView>
+        )}
+
+        {/* Input Bar - Disabled if blocked */}
+        {isBlocked ? (
+          <View style={[styles.inputBar, styles.inputBarBlocked, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
+            <Text style={[styles.blockedMessage, { color: colors.text.muted }]}>
+              This user has been blocked. You cannot send messages.
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.inputBar, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
+            <TouchableOpacity style={styles.inputAction}>
+              <Ionicons name="add" size={24} color={colors.text.muted} />
+            </TouchableOpacity>
+
+            <View style={[styles.inputContainer, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}>
+              <TextInput
+                style={[styles.input, { color: colors.text.primary }]}
+                placeholder="Message..."
+                placeholderTextColor={colors.text.muted}
+                value={message}
+                onChangeText={setMessage}
+                multiline
+                maxLength={1000}
+                onSubmitEditing={() => {
+                  // Prevent auto-submit on Enter - only send via button
+                  // On mobile, Enter creates new line in multiline TextInput
+                }}
+                blurOnSubmit={false}
+              />
+              <TouchableOpacity style={styles.emojiButton}>
+                <Ionicons name="happy-outline" size={22} color={colors.text.muted} />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleSend}
+              style={[styles.sendButton, { backgroundColor: message.trim() ? colors.primary : colors.border.default }]}
+              disabled={!message.trim() || sendMessageMutation.isPending}
+            >
+              {sendMessageMutation.isPending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
               <Ionicons name="send" size={20} color={message.trim() ? '#FFFFFF' : colors.text.muted} />
-            )}
-          </TouchableOpacity>
-        </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
+      
+      {/* Report User Modal */}
+      {partnerId && conversation && (
+        <ReportUserModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          targetUserId={partnerId}
+          targetUserName={conversation.otherUser.displayName}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -318,19 +448,22 @@ const styles = StyleSheet.create({
   messageRow: {
     flexDirection: 'row',
     marginBottom: 12,
-    maxWidth: '85%',
+    maxWidth: '80%',
+    alignSelf: 'flex-start',
   },
   sentRow: {
     alignSelf: 'flex-end',
+    flexDirection: 'row-reverse',
   },
   receivedRow: {
     alignSelf: 'flex-start',
+    flexDirection: 'row',
   },
   messageAvatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    marginRight: 8,
+    flexShrink: 0,
   },
   messageContent: {
     flex: 1,
@@ -341,10 +474,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   sentBubble: {
-    borderBottomRightRadius: 6,
+    borderBottomRightRadius: 4,
   },
   receivedBubble: {
-    borderBottomLeftRadius: 6,
+    borderBottomLeftRadius: 4,
   },
   messageText: {
     fontSize: 15,
@@ -384,7 +517,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   actionButton: {
-    padding: 2,
+    padding: 4,
   },
   inputBar: {
     flexDirection: 'row',
@@ -405,13 +538,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    minHeight: 44,
+    minHeight: 48,
     maxHeight: 120,
   },
   input: {
     flex: 1,
     fontSize: 16,
     maxHeight: 100,
+    paddingRight: 8,
   },
   emojiButton: {
     padding: 4,
@@ -455,6 +589,44 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  menuDropdown: {
+    position: 'absolute',
+    top: 60,
+    right: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 8,
+    minWidth: 180,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 1000,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  menuItemDanger: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  menuItemText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  inputBarBlocked: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  blockedMessage: {
     fontSize: 14,
     textAlign: 'center',
   },

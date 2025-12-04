@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useEffect } from 'react';
-import { View, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { GOOGLE_MAPS_API_KEY } from '@/lib/config';
 import type { NearbyUser } from '@/services/locationService';
@@ -201,15 +201,15 @@ export function GoogleMap({
                     />
                   ) : (
                     <View style={[styles.avatarPlaceholder, { backgroundColor: '#6366f1' }]}>
-                      <View style={styles.avatarInitial}>
+                      <Text style={styles.avatarInitial}>
                         {user.displayName.charAt(0).toUpperCase()}
-                      </View>
+                      </Text>
                     </View>
                   )}
                 </View>
                 {/* Language flag badge */}
                 <View style={styles.flagBadge}>
-                  <View style={styles.flagText}>{teachingLang}</View>
+                  <Text style={styles.flagText}>{teachingLang}</Text>
                 </View>
                 {/* Online indicator */}
                 {isOnline && <View style={styles.onlineIndicator} />}

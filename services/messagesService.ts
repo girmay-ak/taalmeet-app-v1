@@ -17,6 +17,8 @@ import type {
   MessageInsert,
   Profile,
 } from '@/types/database';
+import { getBlockedUserIds } from './safetyService';
+import { ENABLE_LOGGING } from '@/lib/config';
 
 // ============================================================================
 // TYPES
@@ -43,6 +45,10 @@ export interface ConversationListItem {
  * Returns conversations with other user info, last message, and unread count
  */
 export async function getConversations(userId: string): Promise<ConversationListItem[]> {
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] getConversations called with userId:', userId);
+  }
+  
   // Get all conversations where user is a participant
   const { data: participants, error: participantsError } = await supabase
     .from('conversation_participants')
@@ -50,10 +56,18 @@ export async function getConversations(userId: string): Promise<ConversationList
     .eq('user_id', userId);
 
   if (participantsError) {
+    console.error('[messagesService] Error fetching participants:', participantsError);
     throw parseSupabaseError(participantsError);
   }
 
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] Participants found:', participants?.length || 0, participants);
+  }
+
   if (!participants || participants.length === 0) {
+    if (ENABLE_LOGGING) {
+      console.log('[messagesService] No participants found, returning empty array');
+    }
     return [];
   }
 
@@ -63,6 +77,9 @@ export async function getConversations(userId: string): Promise<ConversationList
   );
 
   // Get conversations with last message info
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] Fetching conversations for IDs:', conversationIds);
+  }
   const { data: conversations, error: conversationsError } = await supabase
     .from('conversations')
     .select('*')
@@ -70,10 +87,18 @@ export async function getConversations(userId: string): Promise<ConversationList
     .order('last_message_at', { ascending: false, nullsFirst: false });
 
   if (conversationsError) {
+    console.error('[messagesService] Error fetching conversations:', conversationsError);
     throw parseSupabaseError(conversationsError);
   }
 
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] Conversations found:', conversations?.length || 0, conversations);
+  }
+
   if (!conversations || conversations.length === 0) {
+    if (ENABLE_LOGGING) {
+      console.log('[messagesService] No conversations found, returning empty array');
+    }
     return [];
   }
 
@@ -102,13 +127,21 @@ export async function getConversations(userId: string): Promise<ConversationList
   });
 
   // Get profiles for other users
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] Fetching profiles for user IDs:', Array.from(otherUserIds));
+  }
   const { data: profiles, error: profilesError } = await supabase
     .from('profiles')
     .select('id, display_name, avatar_url')
     .in('id', Array.from(otherUserIds));
 
   if (profilesError) {
+    console.error('[messagesService] Error fetching profiles:', profilesError);
     throw parseSupabaseError(profilesError);
+  }
+
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] Profiles found:', profiles?.length || 0, profiles);
   }
 
   // Create profile map
@@ -120,7 +153,7 @@ export async function getConversations(userId: string): Promise<ConversationList
   const unreadCounts = await Promise.all(
     conversationIds.map(async (convId) => {
       const lastRead = lastReadMap.get(convId);
-      
+
       // Count unread messages (messages from other user that are unread)
       const otherUserId = conversationToOtherUser.get(convId);
       if (!otherUserId) {
@@ -136,7 +169,7 @@ export async function getConversations(userId: string): Promise<ConversationList
 
       if (lastRead) {
         query = query.gt('created_at', lastRead);
-      }
+  }
 
       const { count, error } = await query;
       return { convId, count: count || 0 };
@@ -145,10 +178,45 @@ export async function getConversations(userId: string): Promise<ConversationList
 
   const unreadMap = new Map(unreadCounts.map(u => [u.convId, u.count]));
 
+  // Fetch actual last messages for conversations where last_message_content is null
+  // but last_message_at is set (indicating messages exist)
+  const conversationsNeedingLastMessage = conversations.filter(
+    conv => !conv.last_message_content && conv.last_message_at
+  );
+  
+  const lastMessageMap = new Map<string, string>();
+  
+  if (conversationsNeedingLastMessage.length > 0) {
+    const lastMessagePromises = conversationsNeedingLastMessage.map(async (conv) => {
+      const { data: lastMsg, error } = await supabase
+        .from('messages')
+        .select('content')
+        .eq('conversation_id', conv.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (!error && lastMsg) {
+        return { convId: conv.id, content: lastMsg.content };
+      }
+      return null;
+    });
+    
+    const lastMessages = await Promise.all(lastMessagePromises);
+    lastMessages.forEach(msg => {
+      if (msg) {
+        lastMessageMap.set(msg.convId, msg.content);
+      }
+    });
+  }
+
   // Build result
-  return conversations.map(conv => {
+  const result = conversations.map(conv => {
     const otherUserId = conversationToOtherUser.get(conv.id);
     const otherUserProfile = otherUserId ? profileMap.get(otherUserId) : null;
+
+    // Use last_message_content if available, otherwise fetch from map
+    const lastMessage = conv.last_message_content || lastMessageMap.get(conv.id) || null;
 
     return {
       id: conv.id,
@@ -157,11 +225,23 @@ export async function getConversations(userId: string): Promise<ConversationList
         displayName: otherUserProfile?.display_name || 'Unknown User',
         avatarUrl: otherUserProfile?.avatar_url || null,
       },
-      lastMessage: conv.last_message_content || null,
+      lastMessage: lastMessage,
       lastMessageAt: conv.last_message_at || null,
       unreadCount: unreadMap.get(conv.id) || 0,
     };
   });
+
+  // Filter out conversations with blocked users
+  const blockedIds = await getBlockedUserIds(userId);
+  const blockedSet = new Set(blockedIds);
+  const filteredResult = result.filter(
+    (conv) => !blockedSet.has(conv.otherUser.id)
+  );
+
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] getConversations returning:', filteredResult.length, 'conversations', filteredResult);
+  }
+  return filteredResult;
 }
 
 // ============================================================================
@@ -173,6 +253,10 @@ export async function getConversations(userId: string): Promise<ConversationList
  * Sorted by created_at ascending (oldest first)
  */
 export async function getMessages(conversationId: string): Promise<Message[]> {
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] getMessages called with conversationId:', conversationId);
+  }
+  
   const { data, error } = await supabase
     .from('messages')
     .select('*')
@@ -180,9 +264,13 @@ export async function getMessages(conversationId: string): Promise<Message[]> {
     .order('created_at', { ascending: true });
 
   if (error) {
+    console.error('[messagesService] Error fetching messages:', error);
     throw parseSupabaseError(error);
   }
 
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] getMessages returning:', data?.length || 0, 'messages');
+  }
   return data || [];
 }
 
@@ -202,7 +290,14 @@ export async function sendMessage(
   text: string,
   senderId: string
 ): Promise<Message> {
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] sendMessage called:', { conversationId, text: text.substring(0, 50), senderId });
+  }
+  
   if (!text || text.trim().length === 0) {
+    if (ENABLE_LOGGING) {
+      console.error('[messagesService] Message content is empty');
+    }
     throw new ValidationError('Message content cannot be empty');
   }
 
@@ -215,7 +310,12 @@ export async function sendMessage(
     .single();
 
   if (participantError || !participant) {
+    console.error('[messagesService] User is not a participant:', participantError);
     throw new ValidationError('User is not a participant in this conversation');
+  }
+
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] Participant verified, inserting message');
   }
 
   // Insert message
@@ -237,9 +337,13 @@ export async function sendMessage(
     .single();
 
   if (error) {
+    console.error('[messagesService] Error sending message:', error);
     throw parseSupabaseError(error);
   }
 
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] Message sent successfully:', data.id);
+  }
   return data;
 }
 
@@ -257,7 +361,14 @@ export async function createConversation(
   userId: string,
   otherUserId: string
 ): Promise<string> {
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] createConversation called:', { userId, otherUserId });
+  }
+  
   if (userId === otherUserId) {
+    if (ENABLE_LOGGING) {
+      console.error('[messagesService] Cannot create conversation with yourself');
+    }
     throw new ValidationError('Cannot create conversation with yourself');
   }
 
@@ -269,11 +380,19 @@ export async function createConversation(
     .eq('user_id', userId);
 
   if (userConvError) {
+    console.error('[messagesService] Error checking existing conversations:', userConvError);
     throw parseSupabaseError(userConvError);
+  }
+
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] User conversations found:', userConversations?.length || 0);
   }
 
   if (userConversations && userConversations.length > 0) {
     const conversationIds = userConversations.map(c => c.conversation_id);
+    if (ENABLE_LOGGING) {
+      console.log('[messagesService] Checking for existing conversation with IDs:', conversationIds);
+    }
 
     // Check if any of these conversations also have the other user
     const { data: existing, error: checkError } = await supabase
@@ -286,34 +405,42 @@ export async function createConversation(
 
     if (existing && !checkError) {
       // Conversation already exists
+      if (ENABLE_LOGGING) {
+        console.log('[messagesService] Existing conversation found:', existing.conversation_id);
+      }
       return existing.conversation_id;
+    }
+    if (ENABLE_LOGGING) {
+      console.log('[messagesService] No existing conversation found, creating new one');
     }
   }
 
-  // Create new conversation
-  const { data: newConversation, error: createError } = await supabase
-    .from('conversations')
-    .insert({})
-    .select()
+  // Create new conversation using SECURITY DEFINER function
+  // This bypasses RLS and allows us to add both participants
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] Creating new conversation using function');
+  }
+  const { data: conversationId, error: createError } = await supabase
+    .rpc('get_or_create_conversation', {
+      user1_id: userId,
+      user2_id: otherUserId,
+    })
     .single();
 
-  if (createError || !newConversation) {
-    throw parseSupabaseError(createError || new Error('Failed to create conversation'));
+  if (createError) {
+    console.error('[messagesService] Error creating conversation:', createError);
+    throw parseSupabaseError(createError);
   }
 
-  // Add both users as participants
-  const { error: participantsError } = await supabase
-    .from('conversation_participants')
-    .insert([
-      { conversation_id: newConversation.id, user_id: userId },
-      { conversation_id: newConversation.id, user_id: otherUserId },
-    ]);
-
-  if (participantsError) {
-    throw parseSupabaseError(participantsError);
+  if (!conversationId) {
+    console.error('[messagesService] No conversation ID returned');
+    throw new Error('Failed to create conversation');
   }
 
-  return newConversation.id;
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] Conversation created/found:', conversationId);
+  }
+  return conversationId;
 }
 
 // ============================================================================
@@ -330,6 +457,10 @@ export async function markAsRead(
   conversationId: string,
   userId: string
 ): Promise<void> {
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] markAsRead called:', { conversationId, userId });
+  }
+  
   // Update participant's last_read_at
   // The trigger will automatically mark messages as read
   const { error } = await supabase
@@ -339,7 +470,12 @@ export async function markAsRead(
     .eq('user_id', userId);
 
   if (error) {
+    console.error('[messagesService] Error marking as read:', error);
     throw parseSupabaseError(error);
+  }
+
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] Marked as read successfully');
   }
 
   // Also explicitly mark all unread messages from other users as read
@@ -353,4 +489,4 @@ export async function markAsRead(
     .eq('conversation_id', conversationId)
     .neq('sender_id', userId)
     .eq('is_read', false);
-}
+  }

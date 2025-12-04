@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { parseSupabaseError } from '@/utils/errors';
 import type { Profile, UserLanguage, LanguageSession } from '@/types/database';
 import * as sessionService from './sessionService';
+import { excludeBlockedUsers } from './safetyService';
 
 // ============================================================================
 // TYPES
@@ -238,10 +239,15 @@ export async function getDiscoverFeed(
   // Limit sessions
   const limitedSessions = sessions.slice(0, limit);
 
+  // Filter out blocked users from all user lists
+  const filteredRecommendedUsers = await excludeBlockedUsers(userId, recommendedUsers);
+  const filteredNewUsers = await excludeBlockedUsers(userId, newUsers);
+  const filteredActiveUsers = await excludeBlockedUsers(userId, activeUsers);
+
   return {
-    recommendedUsers: recommendedUsers.slice(0, limit),
-    newUsers: newUsers.slice(0, limit),
-    activeUsers: activeUsers.slice(0, limit),
+    recommendedUsers: filteredRecommendedUsers.slice(0, limit),
+    newUsers: filteredNewUsers.slice(0, limit),
+    activeUsers: filteredActiveUsers.slice(0, limit),
     sessions: limitedSessions,
   };
 }

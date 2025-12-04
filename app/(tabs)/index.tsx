@@ -2,7 +2,7 @@
  * Home/Discover Screen - Matches Figma Design
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import { useAuth } from '@/providers';
 import { useDiscoverFeed } from '@/hooks/useDiscover';
+import { useLanguageEvents } from '@/hooks/useEventbriteEvents';
+import { EventCard } from '@/components/events/EventCard';
+import { EventHorizontalCard } from '@/components/events/EventHorizontalCard';
 import { getLanguageFlag } from '@/utils/languageFlags';
 import type { DiscoverFilters } from '@/services/discoverService';
 
@@ -42,6 +45,15 @@ export default function HomeScreen() {
 
   // Fetch discover feed
   const { data, isLoading, error, refetch } = useDiscoverFeed(filters);
+
+  // Fetch Eventbrite events for selected language
+  const {
+    data: events = [],
+    isLoading: eventsLoading,
+  } = useLanguageEvents({
+    language: selectedLanguage === 'All' ? 'Spanish' : selectedLanguage, // Default to Spanish if All
+    enabled: selectedLanguage !== 'All', // Only fetch when a specific language is selected
+  });
 
   // Handle refresh
   const handleRefresh = async () => {
@@ -78,7 +90,9 @@ export default function HomeScreen() {
         <View style={styles.avatarContainer}>
           <Image
             source={{
-              uri: item.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+              uri: (item.avatar_url && item.avatar_url.trim() !== '') 
+                ? item.avatar_url 
+                : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
             }}
             style={styles.nearbyAvatar}
           />
@@ -156,7 +170,11 @@ export default function HomeScreen() {
         <View style={styles.topBar}>
           <View style={styles.userInfo}>
             <Image
-              source={{ uri: profile?.avatarUrl || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150' }}
+              source={{ 
+                uri: (profile?.avatarUrl && profile.avatarUrl.trim() !== '') 
+                  ? profile.avatarUrl 
+                  : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150' 
+              }}
               style={[styles.userAvatar, { borderColor: colors.primary }]}
             />
             <View>
@@ -288,19 +306,53 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Sessions Section */}
-          {data?.sessions && data.sessions.length > 0 && (
+          {/* Eventbrite Events Horizontal Section */}
+          {selectedLanguage !== 'All' && events.length > 0 && (
+            <View style={[styles.nearbySection, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
+              <Text style={[styles.nearbySectionTitle, { color: colors.text.primary }]}>
+                {selectedLanguage} Events <Text style={{ color: colors.text.muted }}>({events.length})</Text>
+              </Text>
+              <FlatList
+                horizontal
+                data={events}
+                renderItem={({ item }) => <EventHorizontalCard event={item} />}
+                keyExtractor={(item) => `eventbrite-horizontal-${item.id}`}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.nearbyList}
+              />
+            </View>
+          )}
+
+          {/* Sessions & Events Section */}
+          {((data?.sessions && data.sessions.length > 0) || (selectedLanguage !== 'All' && events.length > 0)) && (
             <View style={styles.sessionsContainer}>
               <View style={styles.languageSection}>
                 <View style={styles.languageHeader}>
                   <Text style={[styles.languageTitle, { color: colors.text.primary }]}>
-                    {selectedLanguage === 'All' ? 'Upcoming Sessions' : `${selectedLanguage} Sessions`}
+                    {selectedLanguage === 'All' ? 'Upcoming Sessions' : `${selectedLanguage} Sessions & Events`}
                   </Text>
                   <View style={[styles.countBadge, { backgroundColor: colors.background.primary }]}>
-                    <Text style={[styles.countText, { color: colors.text.primary }]}>({data.sessions.length})</Text>
+                    <Text style={[styles.countText, { color: colors.text.primary }]}>
+                      ({(data?.sessions?.length || 0) + (selectedLanguage !== 'All' ? events.length : 0)})
+                    </Text>
                   </View>
                 </View>
-                {data.sessions.map(renderSessionCard)}
+                
+                {/* Show Eventbrite Events first */}
+                {selectedLanguage !== 'All' && events.length > 0 && (
+                  <>
+                    {events.map((event) => (
+                      <EventCard key={`eventbrite-${event.id}`} event={event} />
+                    ))}
+                  </>
+                )}
+                
+                {/* Show internal Sessions */}
+                {data?.sessions && data.sessions.length > 0 && (
+                  <>
+                    {data.sessions.map(renderSessionCard)}
+                  </>
+                )}
               </View>
             </View>
           )}
@@ -310,13 +362,14 @@ export default function HomeScreen() {
             (data.activeUsers.length === 0 &&
               data.recommendedUsers.length === 0 &&
               data.newUsers.length === 0 &&
-              data.sessions.length === 0)) && (
+              data.sessions.length === 0 &&
+              (selectedLanguage === 'All' || events.length === 0))) && (
             <View style={styles.emptyContainer}>
               <Ionicons name="search-outline" size={64} color={colors.text.muted} />
               <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>No content available</Text>
               <Text style={[styles.emptySubtext, { color: colors.text.muted }]}>
                 {selectedLanguage !== 'All'
-                  ? `No ${selectedLanguage} sessions or users found. Try a different language.`
+                  ? `No ${selectedLanguage} sessions, events, or users found. Try a different language.`
                   : 'Check back later for new users and sessions!'}
               </Text>
             </View>

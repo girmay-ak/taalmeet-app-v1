@@ -35,3 +35,6 @@ export * from './discoverService';
 
 // Storage Service
 export * from './storageService';
+
+// Safety Service (Blocking & Reporting)
+export * from './safetyService';

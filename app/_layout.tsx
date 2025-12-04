@@ -4,6 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 import { QueryProvider } from '@/providers/QueryProvider';
 import { AuthProvider } from '@/providers/AuthProvider';
+import { MatchFoundProvider } from '@/providers/MatchFoundProvider';
+import { GlobalMatchFoundPopup } from '@/components/matches/GlobalMatchFoundPopup';
 import { useColorScheme } from 'react-native';
 
 export default function RootLayout() {
@@ -12,10 +14,13 @@ export default function RootLayout() {
   return (
     <QueryProvider>
       <AuthProvider>
-        <ThemeProvider>
-          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-          <Slot />
-        </ThemeProvider>
+        <MatchFoundProvider>
+          <ThemeProvider>
+            <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+            <Slot />
+            <GlobalMatchFoundPopup />
+          </ThemeProvider>
+        </MatchFoundProvider>
       </AuthProvider>
     </QueryProvider>
   );

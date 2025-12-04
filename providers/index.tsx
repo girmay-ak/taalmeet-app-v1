@@ -14,4 +14,5 @@ export function Providers({ children }: ProvidersProps) {
 }
 
 export { useAuth } from './AuthProvider';
+export { MatchFoundProvider, useMatchFound } from './MatchFoundProvider';
 

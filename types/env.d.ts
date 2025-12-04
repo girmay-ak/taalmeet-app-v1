@@ -14,5 +14,8 @@ declare module '@env' {
   export const EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: string;
   export const SENTRY_DSN: string;
   export const MIXPANEL_TOKEN: string;
+  export const EXPO_PUBLIC_EVENTBRITE_API_KEY: string;
+  export const EXPO_PUBLIC_EVENTBRITE_PUBLIC_TOKEN: string;
+  export const EXPO_PUBLIC_EVENTBRITE_PRIVATE_TOKEN: string;
 }
 

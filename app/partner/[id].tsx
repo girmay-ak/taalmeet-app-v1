@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme/ThemeProvider';
-import { useUserProfile } from '@/hooks/useProfile';
+import { useUserProfile } from '@/hooks/useUser';
 import { useAvailability } from '@/hooks/useAvailability';
 import { useCreateConversation } from '@/hooks/useMessages';
 import { getLanguageFlag } from '@/utils/languageFlags';
@@ -145,7 +145,9 @@ export default function PartnerProfileScreen() {
           <View style={styles.avatarContainer}>
             <Image 
               source={{ 
-                uri: partnerProfile.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=300' 
+                uri: (partnerProfile.avatar_url && partnerProfile.avatar_url.trim() !== '') 
+                  ? partnerProfile.avatar_url 
+                  : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=300' 
               }} 
               style={[styles.avatar, { borderColor: colors.border.default }]} 
             />
@@ -243,18 +245,18 @@ export default function PartnerProfileScreen() {
           <View style={styles.languageGroup}>
             <Text style={[styles.languageLabel, { color: colors.text.muted }]}>Teaching</Text>
             {teachingLang ? (
-              <View style={[styles.languageCard, { backgroundColor: colors.background.primary }]}>
+            <View style={[styles.languageCard, { backgroundColor: colors.background.primary }]}>
                 <Text style={styles.languageFlag}>{getLanguageFlag(teachingLang.language)}</Text>
-                <View style={styles.languageInfo}>
+              <View style={styles.languageInfo}>
                   <Text style={[styles.languageName, { color: colors.text.primary }]}>{teachingLang.language}</Text>
                   <Text style={[styles.languageLevel, { color: '#4FD1C5' }]}>
                     {teachingLang.level || 'Native'}
                   </Text>
-                </View>
-                <View style={[styles.progressBar, { backgroundColor: colors.border.default }]}>
-                  <View style={[styles.progressFill, { width: '100%', backgroundColor: '#4FD1C5' }]} />
-                </View>
               </View>
+              <View style={[styles.progressBar, { backgroundColor: colors.border.default }]}>
+                <View style={[styles.progressFill, { width: '100%', backgroundColor: '#4FD1C5' }]} />
+              </View>
+            </View>
             ) : (
               <Text style={[styles.emptyLanguageText, { color: colors.text.muted }]}>No teaching languages</Text>
             )}
@@ -264,18 +266,18 @@ export default function PartnerProfileScreen() {
           <View style={styles.languageGroup}>
             <Text style={[styles.languageLabel, { color: colors.text.muted }]}>Learning</Text>
             {learningLang ? (
-              <View style={[styles.languageCard, { backgroundColor: colors.background.primary }]}>
+            <View style={[styles.languageCard, { backgroundColor: colors.background.primary }]}>
                 <Text style={styles.languageFlag}>{getLanguageFlag(learningLang.language)}</Text>
-                <View style={styles.languageInfo}>
+              <View style={styles.languageInfo}>
                   <Text style={[styles.languageName, { color: colors.text.primary }]}>{learningLang.language}</Text>
                   <Text style={[styles.languageLevel, { color: '#5FB3B3' }]}>
                     {learningLang.level || 'Beginner'}
                   </Text>
-                </View>
-                <View style={[styles.progressBar, { backgroundColor: colors.border.default }]}>
-                  <View style={[styles.progressFill, { width: '70%', backgroundColor: '#5FB3B3' }]} />
-                </View>
               </View>
+              <View style={[styles.progressBar, { backgroundColor: colors.border.default }]}>
+                <View style={[styles.progressFill, { width: '70%', backgroundColor: '#5FB3B3' }]} />
+              </View>
+            </View>
             ) : (
               <Text style={[styles.emptyLanguageText, { color: colors.text.muted }]}>No learning languages</Text>
             )}
@@ -284,19 +286,19 @@ export default function PartnerProfileScreen() {
 
         {/* Interests Section */}
         {partnerProfile.interests && partnerProfile.interests.length > 0 && (
-          <View style={[styles.section, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Interests</Text>
-            <View style={styles.interestsContainer}>
+        <View style={[styles.section, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Interests</Text>
+          <View style={styles.interestsContainer}>
               {partnerProfile.interests.map((interest, index) => (
-                <View
+              <View
                   key={index}
-                  style={[styles.interestTag, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}
-                >
-                  <Text style={[styles.interestText, { color: colors.text.muted }]}>{interest}</Text>
-                </View>
-              ))}
-            </View>
+                style={[styles.interestTag, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}
+              >
+                <Text style={[styles.interestText, { color: colors.text.muted }]}>{interest}</Text>
+              </View>
+            ))}
           </View>
+        </View>
         )}
 
         {/* Reviews Section - Placeholder for future implementation */}

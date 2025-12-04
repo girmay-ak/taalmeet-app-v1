@@ -203,7 +203,7 @@ export function AvailabilityBottomSheet({
         useNativeDriver: true,
       }).start((finished) => {
         if (finished) {
-          // Reset to bottom after animation completes
+        // Reset to bottom after animation completes
           slideAnim.setValue(screenHeight);
         }
       });

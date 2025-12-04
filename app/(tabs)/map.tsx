@@ -24,6 +24,16 @@ import Slider from '@react-native-community/slider';
 import { router } from 'expo-router';
 import { useAuth } from '@/providers';
 import { useNearbyUsers, useUpdateUserLocation } from '@/hooks/useLocation';
+import {
+  useConnections,
+  useSendConnectionRequest,
+  useConnectionRequests,
+  useAcceptRequest,
+} from '@/hooks/useConnections';
+import { NotificationContainer } from '@/components/notifications/NotificationContainer';
+import { useMatchFound } from '@/providers/MatchFoundProvider';
+import type { ConnectionWithProfile } from '@/services/connectionsService';
+import * as Location from 'expo-location';
 // Conditionally import Mapbox (only if native code is available)
 let Mapbox: any = null;
 let MapboxMap: any = null;
@@ -75,6 +85,9 @@ export default function MapScreen() {
   // Initialize with default location (The Hague) so map shows immediately
   const [userLocation, setUserLocation] = useState<[number, number] | null>([4.3007, 52.0705]);
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
+  const [locationPermission, setLocationPermission] = useState<Location.PermissionStatus | null>(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const locationWatchSubscription = useRef<Location.LocationSubscription | null>(null);
   const [filters, setFilters] = useState<Filters>({
     maxDistance: 50,
     availability: 'all',
@@ -110,6 +123,13 @@ export default function MapScreen() {
 
   // Fetch nearby users
   const { data: nearbyUsers = [], isLoading, error, refetch } = useNearbyUsers(backendFilters);
+  
+  // Fetch connections to check connection status
+  const { connections, requests: receivedRequests } = useConnections(user?.id);
+  const sendConnectionRequestMutation = useSendConnectionRequest();
+  const acceptRequestMutation = useAcceptRequest();
+  const { showMatch } = useMatchFound();
+  
 
   // Transform backend data to UI format
   const transformedPartners = useMemo(() => {
@@ -134,7 +154,9 @@ export default function MapScreen() {
         id: user.id,
         name: user.displayName,
         age: 0, // Age not available in backend
-        avatar: user.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+        avatar: (user.avatarUrl && user.avatarUrl.trim() !== '') 
+          ? user.avatarUrl 
+          : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
         distance: Math.round(user.distanceKm * 10) / 10,
         matchScore: Math.round(matchScore),
         teaching: {
@@ -172,6 +194,38 @@ export default function MapScreen() {
     ? filteredPartners.find((p) => p.id === selectedPartner)
     : null;
 
+  // Check connection status for selected partner
+  // Note: getConnectionRequests only returns received requests (where user is partner_id)
+  // So we need to check connections differently for sent requests
+  const selectedConnectionStatus = useMemo(() => {
+    if (!selected || !user?.id) return null;
+    
+    // Check all connections (accepted + pending) where user is either user_id or partner_id
+    // We'll need to query all connections to find sent requests
+    // For now, check received requests first
+    const receivedRequest = receivedRequests.find(
+      (req) => req.user_id === selected.id // Request sent by selected partner to current user
+    );
+    
+    if (receivedRequest && receivedRequest.status === 'pending') {
+      return { status: 'request_received' as const, connection: receivedRequest };
+    }
+    
+    // Check if already connected (accepted)
+    const acceptedConnection = connections.find(
+      (conn) => conn.partner.id === selected.id
+    );
+    
+    if (acceptedConnection && acceptedConnection.status === 'accepted') {
+      return { status: 'connected' as const, connection: acceptedConnection };
+    }
+    
+    // For sent requests, we'd need to query connections where user_id = current user
+    // For now, assume not connected if not in received requests or accepted connections
+    // TODO: Add query for sent pending requests
+    return { status: 'not_connected' as const, connection: null };
+  }, [selected, user?.id, connections, receivedRequests]);
+
   // Transform for markers component
   const markerUsers: NearbyUserMarker[] = useMemo(() => {
     return filteredPartners.map(partner => {
@@ -180,7 +234,11 @@ export default function MapScreen() {
       return {
         id: partner.id,
         displayName: partner.name,
-        avatarUrl: originalUser?.avatarUrl || partner.avatar || null,
+        avatarUrl: (originalUser?.avatarUrl && originalUser.avatarUrl.trim() !== '') 
+          ? originalUser.avatarUrl 
+          : (partner.avatar && partner.avatar.trim() !== '') 
+            ? partner.avatar 
+            : null,
         lat: partner.lat,
         lng: partner.lng,
         languages: partner.languages,
@@ -208,22 +266,155 @@ export default function MapScreen() {
   }, [updateLocationMutation]);
 
   // Handle center on my location
-  const handleCenterOnLocation = useCallback(() => {
-    if (userLocation) {
-      // Trigger location update to center map
-      handleUserLocationUpdate({
-        latitude: userLocation[1],
-        longitude: userLocation[0],
-      });
-    }
-  }, [userLocation, handleUserLocationUpdate]);
+  const handleCenterOnLocation = useCallback(async () => {
+    try {
+      setIsGettingLocation(true);
+      
+      // Check permission first
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+        if (newStatus !== 'granted') {
+          Alert.alert(
+            'Permission Required',
+            'Location permission is required to center on your location.',
+            [{ text: 'OK' }]
+          );
+          setIsGettingLocation(false);
+          return;
+        }
+      }
 
-  // Update location from profile when available
+      // Get fresh location
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const { latitude, longitude } = location.coords;
+      setUserLocation([longitude, latitude]);
+      
+      // Update in backend
+      await updateLocationMutation.mutateAsync({
+        lat: latitude,
+        lng: longitude,
+      });
+    } catch (error) {
+      console.error('Error centering on location:', error);
+      Alert.alert(
+        'Error',
+        'Failed to get your current location. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsGettingLocation(false);
+    }
+  }, [updateLocationMutation]);
+
+  // Request location permissions and get current location on mount
   useEffect(() => {
-    if (profile?.lat && profile?.lng) {
+    let isMounted = true;
+
+    const requestLocationPermission = async () => {
+      try {
+        // Check if location services are enabled
+        const servicesEnabled = await Location.hasServicesEnabledAsync();
+        if (!servicesEnabled) {
+          Alert.alert(
+            'Location Services Disabled',
+            'Please enable location services in your device settings to find nearby partners.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
+        // Request permission
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        setLocationPermission(status);
+
+        if (status !== 'granted') {
+          Alert.alert(
+            'Permission Denied',
+            'Location permission is required to find nearby language partners. You can enable it in your device settings.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
+        // Get current location
+        setIsGettingLocation(true);
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+
+        if (isMounted) {
+          const { latitude, longitude } = location.coords;
+          setUserLocation([longitude, latitude]);
+          
+          // Update location in backend
+          try {
+            await updateLocationMutation.mutateAsync({
+              lat: latitude,
+              lng: longitude,
+            });
+          } catch (error) {
+            console.warn('Failed to update location:', error);
+          }
+        }
+
+        // Start watching location changes (update every 20 seconds)
+        if (isMounted) {
+          locationWatchSubscription.current = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.High,
+              timeInterval: 20000, // Update every 20 seconds
+              distanceInterval: 100, // Update every 100 meters
+            },
+            (location) => {
+              if (isMounted) {
+                const { latitude, longitude } = location.coords;
+                setUserLocation([longitude, latitude]);
+                
+                // Update location in backend (debounced in mutation)
+                updateLocationMutation.mutate({
+                  lat: latitude,
+                  lng: longitude,
+                });
+              }
+            }
+          );
+        }
+      } catch (error) {
+        console.error('Error getting location:', error);
+        Alert.alert(
+          'Location Error',
+          'Failed to get your location. Please check your device settings.',
+          [{ text: 'OK' }]
+        );
+      } finally {
+        if (isMounted) {
+          setIsGettingLocation(false);
+        }
+      }
+    };
+
+    requestLocationPermission();
+
+    // Cleanup
+    return () => {
+      isMounted = false;
+      if (locationWatchSubscription.current) {
+        locationWatchSubscription.current.remove();
+        locationWatchSubscription.current = null;
+      }
+    };
+  }, []);
+
+  // Update location from profile when available (fallback)
+  useEffect(() => {
+    if (profile?.lat && profile?.lng && !userLocation) {
       setUserLocation([profile.lng, profile.lat]);
     }
-  }, [profile?.lat, profile?.lng]);
+  }, [profile?.lat, profile?.lng, userLocation]);
 
   const hasActiveFilters =
     filters.maxDistance < 50 ||
@@ -265,6 +456,9 @@ export default function MapScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+      {/* Notifications Container */}
+      <NotificationContainer />
+      
       {/* Map Area */}
       <View style={styles.mapContainer}>
         {/* Mapbox Map, Google Maps fallback, or Loading UI */}
@@ -346,11 +540,11 @@ export default function MapScreen() {
         )}
 
         {/* Loading Overlay */}
-        {isLoading && (
+        {(isLoading || isGettingLocation) && (
           <View style={[styles.loadingOverlay, { backgroundColor: `${colors.background.primary}CC` }]}>
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={[styles.loadingText, { color: colors.text.muted }]}>
-              Finding nearby partners...
+              {isGettingLocation ? 'Getting your location...' : 'Finding nearby partners...'}
             </Text>
           </View>
         )}
@@ -463,16 +657,79 @@ export default function MapScreen() {
                   >
                     <Text style={styles.viewProfileText}>View Profile</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.chatBtn, { borderColor: colors.border.default }]}
-                    onPress={() => {
-                      router.push(`/chat/${selected.id}`);
-                    }}
-                  >
-                    <Text style={[styles.chatBtnText, { color: colors.text.primary }]}>
-                      Chat
-                    </Text>
-                  </TouchableOpacity>
+                  {selectedConnectionStatus?.status === 'connected' ? (
+                    // Connected - show Message button
+                    <TouchableOpacity
+                      style={[styles.chatBtn, { borderColor: colors.border.default }]}
+                      onPress={() => {
+                        router.push(`/chat/${selected.id}`);
+                      }}
+                    >
+                      <Ionicons name="chatbubble" size={18} color={colors.text.primary} />
+                      <Text style={[styles.chatBtnText, { color: colors.text.primary }]}>
+                        Message
+                      </Text>
+                    </TouchableOpacity>
+                  ) : selectedConnectionStatus?.status === 'request_sent' ? (
+                    // Request sent - show pending state
+                    <TouchableOpacity
+                      style={[styles.chatBtn, { borderColor: colors.border.default, opacity: 0.6 }]}
+                      disabled
+                    >
+                      <Ionicons name="time" size={18} color={colors.text.muted} />
+                      <Text style={[styles.chatBtnText, { color: colors.text.muted }]}>
+                        Pending
+                      </Text>
+                    </TouchableOpacity>
+                  ) : selectedConnectionStatus?.status === 'request_received' ? (
+                    // Request received - show Accept button
+                    <TouchableOpacity
+                      style={[styles.connectBtn, { backgroundColor: colors.primary }]}
+                      onPress={async () => {
+                        if (selectedConnectionStatus.connection) {
+                          try {
+                            // Accept the connection request
+                            await acceptRequestMutation.mutateAsync(
+                              selectedConnectionStatus.connection.id
+                            );
+                            // Show match popup - use the connection we already have which includes profile
+                            // Update status to accepted for display
+                            const connectionToShow = {
+                              ...selectedConnectionStatus.connection,
+                              status: 'accepted' as const,
+                            };
+                            showMatch(connectionToShow);
+                          } catch (error) {
+                            console.error('Failed to accept connection:', error);
+                          }
+                        }
+                      }}
+                    >
+                      <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+                      <Text style={styles.connectBtnText}>Accept</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    // Not connected - show Connect button
+                    <TouchableOpacity
+                      style={[styles.connectBtn, { backgroundColor: colors.primary }]}
+                      onPress={async () => {
+                        if (!user?.id) return;
+                        try {
+                          await sendConnectionRequestMutation.mutateAsync(selected.id);
+                          Alert.alert(
+                            'Connection Request Sent!',
+                            'You will be notified when they accept your request.',
+                            [{ text: 'OK' }]
+                          );
+                        } catch (error) {
+                          console.error('Failed to send connection request:', error);
+                        }
+                      }}
+                    >
+                      <Ionicons name="heart" size={18} color="#FFFFFF" />
+                      <Text style={styles.connectBtnText}>Connect</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             </View>
@@ -675,6 +932,8 @@ export default function MapScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Match Found Popup is now handled globally via GlobalMatchFoundPopup */}
     </View>
   );
 }
@@ -853,14 +1112,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   chatBtn: {
-    paddingHorizontal: 20,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
+    gap: 6,
   },
   chatBtnText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  connectBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  connectBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   partnerList: {
     gap: 8,

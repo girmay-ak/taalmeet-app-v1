@@ -35,3 +35,6 @@ export * from './usePreferences';
 
 // Discover Hooks
 export * from './useDiscover';
+
+// Safety Hooks (Blocking & Reporting)
+export * from './useSafety';

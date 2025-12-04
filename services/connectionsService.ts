@@ -11,6 +11,7 @@ import {
   parseSupabaseError,
 } from '@/utils/errors';
 import type { Connection, ConnectionInsert, ConnectionUpdate, Profile, UserLanguage } from '@/types/database';
+import { excludeBlockedUsers } from './safetyService';
 
 // ============================================================================
 // TYPES
@@ -22,7 +23,7 @@ export interface ConnectionWithProfile extends Connection {
   };
 }
 
-export interface SuggestedConnection extends Profile & {
+export interface SuggestedConnection extends Profile {
   languages: UserLanguage[];
   matchScore: number;
   reason: string;
@@ -72,13 +73,16 @@ export async function getConnections(userId: string): Promise<ConnectionWithProf
   // Combine connections with profiles
   const profileMap = new Map((profiles || []).map(p => [p.id, p]));
   
-  return connections.map(conn => {
+  const connectionsWithProfiles = connections.map(conn => {
     const partnerId = conn.user_id === userId ? conn.partner_id : conn.user_id;
     return {
       ...conn,
       partner: profileMap.get(partnerId)!,
     };
   }).filter(item => item.partner) as ConnectionWithProfile[];
+
+  // Filter out blocked users
+  return await excludeBlockedUsers(userId, connectionsWithProfiles);
 }
 
 /**
@@ -118,10 +122,13 @@ export async function getConnectionRequests(userId: string): Promise<ConnectionW
   // Combine connections with profiles
   const profileMap = new Map((profiles || []).map(p => [p.id, p]));
   
-  return connections.map(conn => ({
+  const requestsWithProfiles = connections.map(conn => ({
     ...conn,
     partner: profileMap.get(conn.user_id)!,
   })).filter(item => item.partner) as ConnectionWithProfile[];
+
+  // Filter out blocked users
+  return await excludeBlockedUsers(userId, requestsWithProfiles);
 }
 
 /**
@@ -242,7 +249,8 @@ export async function getSuggestedConnections(userId: string, limit: number = 20
     .sort((a: SuggestedConnection, b: SuggestedConnection) => b.matchScore - a.matchScore)
     .slice(0, limit);
 
-  return suggestions;
+  // Filter out blocked users
+  return await excludeBlockedUsers(userId, suggestions);
 }
 
 // ============================================================================
@@ -349,6 +357,46 @@ export async function rejectRequest(connectionId: string): Promise<Connection> {
   }
 
   return data;
+}
+
+/**
+ * Get a connection by ID with full profile data
+ */
+export async function getConnectionById(
+  connectionId: string,
+  currentUserId: string
+): Promise<ConnectionWithProfile | null> {
+  const { data: connection, error: connError } = await supabase
+    .from('connections')
+    .select('*')
+    .eq('id', connectionId)
+    .single();
+
+  if (connError || !connection) {
+    throw parseSupabaseError(connError || new Error('Connection not found'));
+  }
+
+  // Get partner ID (the other user)
+  const partnerId = connection.user_id === currentUserId ? connection.partner_id : connection.user_id;
+
+  // Get partner profile with languages
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select(`
+      *,
+      languages:user_languages(*)
+    `)
+    .eq('id', partnerId)
+    .single();
+
+  if (profileError || !profile) {
+    throw parseSupabaseError(profileError || new Error('Profile not found'));
+  }
+
+  return {
+    ...connection,
+    partner: profile,
+  };
 }
 
 /**
