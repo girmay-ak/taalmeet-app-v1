@@ -231,10 +231,27 @@ export async function getExpoPushToken(): Promise<string | null> {
       return null;
     }
 
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
-    if (!projectId) {
-      console.warn('Project ID not found. Push notifications may not work.');
-      return null;
+    // Try to get projectId from various sources
+    const projectId = 
+      Constants.expoConfig?.extra?.eas?.projectId || 
+      Constants.easConfig?.projectId ||
+      Constants.expoConfig?.extra?.projectId;
+
+    // Validate projectId is a valid UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isValidProjectId = projectId && uuidRegex.test(projectId);
+
+    if (!isValidProjectId) {
+      // For development, try without projectId (legacy method)
+      // This works in Expo Go and development builds
+      try {
+        const tokenData = await Notifications.getExpoPushTokenAsync();
+        return tokenData.data;
+      } catch (legacyError) {
+        console.warn('Project ID not found or invalid. Push notifications require a valid EAS project ID for production. For development, you can use Expo Go or set up EAS project.');
+        console.warn('To set up EAS project: Run "eas init" or add a valid projectId to app.json extra.eas.projectId');
+        return null;
+      }
     }
 
     const tokenData = await Notifications.getExpoPushTokenAsync({
