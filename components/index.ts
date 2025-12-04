@@ -59,6 +59,7 @@ export { ChangePasswordModal } from './profile/ChangePasswordModal';
 // Safety Modals (React Native)
 export { ReportUserModal } from './modals/ReportUserModal';
 export { DeleteAccountModal } from './modals/DeleteAccountModal';
+export { ActionModal } from './modals/ActionModal';
 
 // Icons
 export * from './icons';

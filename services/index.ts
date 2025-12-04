@@ -41,3 +41,6 @@ export * from './safetyService';
 
 // Data Export Service (GDPR)
 export * from './dataExportService';
+
+// Moderation Service (Admin)
+export * from './moderationService';

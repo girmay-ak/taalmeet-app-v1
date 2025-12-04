@@ -81,6 +81,11 @@ export interface Database {
         Insert: ReportInsert;
         Update: ReportUpdate;
       };
+      user_actions: {
+        Row: UserAction;
+        Insert: UserActionInsert;
+        Update: UserActionUpdate;
+      };
     };
   };
 }
@@ -549,6 +554,11 @@ export interface Report {
   target_id: string;
   reason: string;
   message: string | null;
+  status: 'pending' | 'reviewing' | 'resolved' | 'dismissed' | 'action_taken';
+  admin_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  action_taken_id: string | null;
   created_at: string;
 }
 
@@ -560,6 +570,45 @@ export interface ReportInsert {
 }
 
 export interface ReportUpdate {
-  // No updates allowed (immutable)
+  status?: 'pending' | 'reviewing' | 'resolved' | 'dismissed' | 'action_taken';
+  admin_notes?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  action_taken_id?: string | null;
+}
+
+// ============================================================================
+// USER_ACTIONS TABLE
+// ============================================================================
+
+export interface UserAction {
+  id: string;
+  user_id: string;
+  action_type: 'warning' | 'suspension' | 'ban';
+  reason: string;
+  details: string | null;
+  duration_days: number | null;
+  expires_at: string | null;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+}
+
+export interface UserActionInsert {
+  user_id: string;
+  action_type: 'warning' | 'suspension' | 'ban';
+  reason: string;
+  details?: string | null;
+  duration_days?: number | null;
+  expires_at?: string | null;
+  created_by?: string | null;
+}
+
+export interface UserActionUpdate {
+  is_active?: boolean;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
 }
 
