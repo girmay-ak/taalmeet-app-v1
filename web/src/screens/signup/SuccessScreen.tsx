@@ -7,7 +7,7 @@ interface SuccessScreenProps {
 
 export function SuccessScreen({ onComplete }: SuccessScreenProps) {
   return (
-    <div className="fixed inset-0 flex flex-col bg-[#0F0F0F]">
+    <div className="flex flex-col h-full bg-[#0F0F0F]">
       <div className="flex-1 flex flex-col items-center justify-center px-6">
         {/* Success Animation */}
         <motion.div
