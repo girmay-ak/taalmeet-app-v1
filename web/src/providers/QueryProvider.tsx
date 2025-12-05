@@ -4,9 +4,7 @@
  */
 
 import { QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { queryClient } from '../lib/query-client';
-import { IS_DEV } from '../lib/config';
 
 interface QueryProviderProps {
   children: React.ReactNode;
@@ -16,9 +14,9 @@ export function QueryProvider({ children }: QueryProviderProps) {
   return (
     <QueryClientProvider client={queryClient}>
       {children}
-      {/* Show React Query DevTools in development */}
-      {IS_DEV && <ReactQueryDevtools initialIsOpen={false} />}
+      {/* React Query DevTools can be added later if needed */}
+      {/* Install: npm install @tanstack/react-query-devtools */}
+      {/* {IS_DEV && <ReactQueryDevtools initialIsOpen={false} />} */}
     </QueryClientProvider>
   );
 }
-
