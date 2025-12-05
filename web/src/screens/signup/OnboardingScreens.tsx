@@ -38,7 +38,7 @@ export function OnboardingScreens({ onComplete, onSkip }: OnboardingScreensProps
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0F0F0F]">
+    <div className="fixed inset-0 flex flex-col bg-[#0F0F0F]">
       {/* Skip Button */}
       <div className="flex justify-end px-6 pt-6 safe-top">
         <button

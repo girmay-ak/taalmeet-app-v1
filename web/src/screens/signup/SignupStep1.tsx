@@ -51,7 +51,7 @@ export function SignupStep1({ onNext, onBack }: SignupStep1Props) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0F0F0F] overflow-y-auto">
+    <div className="fixed inset-0 flex flex-col bg-[#0F0F0F] overflow-y-auto">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-4 safe-top">
         <button
