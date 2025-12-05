@@ -12,17 +12,17 @@ export default defineConfig(({ mode }) => {
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
       alias: {
-        // Core path aliases (must be first for proper resolution)
-        '@': path.resolve(__dirname, './src'),
+        // More specific aliases first (order matters in Vite!)
         '@/services': path.resolve(__dirname, '../services'),
         '@/lib': path.resolve(__dirname, './src/lib'),
         '@/utils': path.resolve(__dirname, '../utils'),
         '@/types': path.resolve(__dirname, '../types'),
-        // Shared code aliases for monorepo structure
         '@/shared': path.resolve(__dirname, '../services'),
         '@/shared/hooks': path.resolve(__dirname, '../hooks'),
         '@/shared/types': path.resolve(__dirname, '../types'),
         '@/shared/lib': path.resolve(__dirname, '../lib'),
+        // General @ alias (less specific, comes after specific ones)
+        '@': path.resolve(__dirname, './src'),
         // Package aliases (for version-specific imports)
         'vaul@1.1.2': 'vaul',
         'sonner@2.0.3': 'sonner',
