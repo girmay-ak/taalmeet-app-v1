@@ -2,46 +2,46 @@
  * Web App Configuration
  * Centralized configuration for environment variables
  * 
- * Note: Vite exposes environment variables via import.meta.env
- * All variables must be prefixed with VITE_ to be exposed to client code
+ * Note: Next.js exposes environment variables via process.env
+ * All client-side variables must be prefixed with NEXT_PUBLIC_ to be exposed
  */
 
 // ==========================================
 // SUPABASE CONFIGURATION
 // ==========================================
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 // ==========================================
 // MAPS CONFIGURATION
 // ==========================================
-export const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
-export const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+export const MAPBOX_ACCESS_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
+export const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 // ==========================================
 // EXTERNAL SERVICES
 // ==========================================
-export const EVENTBRITE_API_KEY = import.meta.env.VITE_EVENTBRITE_API_KEY;
-export const EVENTBRITE_PUBLIC_TOKEN = import.meta.env.VITE_EVENTBRITE_PUBLIC_TOKEN;
+export const EVENTBRITE_API_KEY = process.env.NEXT_PUBLIC_EVENTBRITE_API_KEY || '';
+export const EVENTBRITE_PUBLIC_TOKEN = process.env.NEXT_PUBLIC_EVENTBRITE_PUBLIC_TOKEN || '';
 
 // ==========================================
 // FEATURE FLAGS
 // ==========================================
-export const ENABLE_ANALYTICS = import.meta.env.VITE_ENABLE_ANALYTICS === 'true';
-export const ENABLE_CRASH_REPORTING = import.meta.env.VITE_ENABLE_CRASH_REPORTING === 'true';
-export const ENABLE_MOCK_DATA = import.meta.env.VITE_ENABLE_MOCK_DATA === 'true';
+export const ENABLE_ANALYTICS = process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === 'true';
+export const ENABLE_CRASH_REPORTING = process.env.NEXT_PUBLIC_ENABLE_CRASH_REPORTING === 'true';
+export const ENABLE_MOCK_DATA = process.env.NEXT_PUBLIC_ENABLE_MOCK_DATA === 'true';
 
 // ==========================================
 // ERROR TRACKING & ANALYTICS
 // ==========================================
-export const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN;
-export const MIXPANEL_TOKEN = import.meta.env.VITE_MIXPANEL_TOKEN;
+export const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN || '';
+export const MIXPANEL_TOKEN = process.env.NEXT_PUBLIC_MIXPANEL_TOKEN || '';
 
 // ==========================================
 // APP CONFIGURATION
 // ==========================================
-export const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT) || 30000;
-export const NODE_ENV = import.meta.env.VITE_NODE_ENV || import.meta.env.MODE || 'development';
+export const API_TIMEOUT = Number(process.env.NEXT_PUBLIC_API_TIMEOUT) || 30000;
+export const NODE_ENV = process.env.NODE_ENV || 'development';
 export const IS_DEV = NODE_ENV === 'development';
 export const IS_PROD = NODE_ENV === 'production';
 export const APP_NAME = 'TaalMeet';
@@ -56,8 +56,8 @@ export const APP_NAME = 'TaalMeet';
  */
 export function validateEnvVars(): void {
   const required: Record<string, string | undefined> = {
-    VITE_SUPABASE_URL: SUPABASE_URL,
-    VITE_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
+    NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
   };
 
   const missing = Object.entries(required)
@@ -68,7 +68,7 @@ export function validateEnvVars(): void {
     const errorMessage = `
 Missing required environment variables: ${missing.join(', ')}
 
-Please create a .env file in the web/ directory with the required variables.
+Please create a .env.local file in the web/ directory with the required variables.
 See .env.example for reference.
 
 Required variables:
@@ -110,4 +110,3 @@ export function getEnvVars() {
     API_TIMEOUT,
   };
 }
-
