@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{\"providers/AuthProvider.tsx -> @/services/profileService\":{\"id\":\"providers/AuthProvider.tsx -> @/services/profileService\",\"files\":[]}}"
+self.__REACT_LOADABLE_MANIFEST="{\"providers/AuthProvider.tsx -> @/services/profileService\":{\"id\":\"providers/AuthProvider.tsx -> @/services/profileService\",\"files\":[\"static/chunks/_app-pages-browser_services_profileService_ts.js\"]}}"

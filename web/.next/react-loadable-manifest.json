@@ -1,6 +1,8 @@
 {
   "providers/AuthProvider.tsx -> @/services/profileService": {
     "id": "providers/AuthProvider.tsx -> @/services/profileService",
-    "files": []
+    "files": [
+      "static/chunks/_app-pages-browser_services_profileService_ts.js"
+    ]
   }
 }

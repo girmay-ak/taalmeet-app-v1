@@ -3,6 +3,8 @@
  * Manages authentication state and provides auth context
  */
 
+'use client';
+
 import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
