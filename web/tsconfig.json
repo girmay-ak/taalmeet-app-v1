@@ -24,7 +24,15 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@/shared/*": ["../*"]
+      "@/shared/*": ["../*"],
+      "@/shared/services/*": ["../services/*"],
+      "@/shared/hooks/*": ["../hooks/*"],
+      "@/shared/types/*": ["../types/*"],
+      "@/shared/lib/*": ["../lib/*"],
+      "@/shared/utils/*": ["../utils/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/utils/*": ["../utils/*"],
+      "@/types/*": ["../types/*"]
     }
   },
   "include": ["src"],

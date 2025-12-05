@@ -2,9 +2,13 @@
   import { defineConfig } from 'vite';
   import react from '@vitejs/plugin-react-swc';
   import path from 'path';
+  import tsconfigPaths from 'vite-tsconfig-paths';
 
   export default defineConfig({
-    plugins: [react()],
+    plugins: [
+      react(),
+      tsconfigPaths(), // This will read tsconfig.json paths
+    ],
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
       alias: {
