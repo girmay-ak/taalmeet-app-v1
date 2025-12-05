@@ -168,6 +168,6 @@ export function getSupabaseClient(): SupabaseClient<Database> {
 }
 
 // Export types for convenience
-export type { Database } from '@/shared/types/database';
+export type { Database } from '@/types/database';
 export type { SupabaseClient } from '@supabase/supabase-js';
 
