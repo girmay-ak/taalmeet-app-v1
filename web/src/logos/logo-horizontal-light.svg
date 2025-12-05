@@ -1,0 +1,18 @@
+<svg width="300" height="100" viewBox="0 0 300 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Horizontal Logo with Text (Light Background) -->
+  
+  <!-- Icon -->
+  <rect x="5" y="5" width="90" height="90" rx="20" fill="url(#logoGradient)"/>
+  <rect x="25" y="30" width="50" height="30" rx="15" fill="white"/>
+  <path d="M45 60 L40 70 L50 60 Z" fill="white"/>
+  
+  <!-- TaalMeet Text -->
+  <text x="115" y="62" font-family="system-ui, -apple-system, sans-serif" font-size="36" font-weight="700" fill="#0A0A0A">TaalMeet</text>
+  
+  <defs>
+    <linearGradient id="logoGradient" x1="5" y1="5" x2="95" y2="95" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4DB8B8"/>
+      <stop offset="100%" stop-color="#2D9B9B"/>
+    </linearGradient>
+  </defs>
+</svg>

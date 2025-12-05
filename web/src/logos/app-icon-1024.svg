@@ -1,0 +1,17 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- iOS App Icon 1024x1024 -->
+  <rect x="0" y="0" width="1024" height="1024" rx="227" fill="url(#logoGradient)"/>
+  
+  <!-- Speech Bubble Icon -->
+  <rect x="256" y="307" width="512" height="307" rx="153.5" fill="white"/>
+  
+  <!-- Speech bubble tail -->
+  <path d="M461 614 L410 717 L512 614 Z" fill="white"/>
+  
+  <defs>
+    <linearGradient id="logoGradient" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4DB8B8"/>
+      <stop offset="100%" stop-color="#2D9B9B"/>
+    </linearGradient>
+  </defs>
+</svg>

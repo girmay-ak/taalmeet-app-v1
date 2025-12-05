@@ -1,0 +1,17 @@
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Favicon 16x16 -->
+  <rect x="1" y="1" width="14" height="14" rx="3" fill="url(#logoGradient)"/>
+  
+  <!-- Simplified Speech Bubble -->
+  <rect x="4" y="5" width="8" height="5" rx="2.5" fill="white"/>
+  
+  <!-- Speech bubble tail -->
+  <path d="M7 10 L6 12 L8 10 Z" fill="white"/>
+  
+  <defs>
+    <linearGradient id="logoGradient" x1="1" y1="1" x2="15" y2="15" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4DB8B8"/>
+      <stop offset="100%" stop-color="#2D9B9B"/>
+    </linearGradient>
+  </defs>
+</svg>

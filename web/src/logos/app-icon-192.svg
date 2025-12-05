@@ -1,0 +1,17 @@
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Android/PWA App Icon 192x192 -->
+  <rect x="0" y="0" width="192" height="192" rx="42" fill="url(#logoGradient)"/>
+  
+  <!-- Speech Bubble Icon -->
+  <rect x="48" y="58" width="96" height="58" rx="29" fill="white"/>
+  
+  <!-- Speech bubble tail -->
+  <path d="M86 116 L77 134 L96 116 Z" fill="white"/>
+  
+  <defs>
+    <linearGradient id="logoGradient" x1="0" y1="0" x2="192" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4DB8B8"/>
+      <stop offset="100%" stop-color="#2D9B9B"/>
+    </linearGradient>
+  </defs>
+</svg>
