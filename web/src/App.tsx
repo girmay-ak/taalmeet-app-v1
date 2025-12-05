@@ -1,7 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
-import { QueryProvider } from './providers/QueryProvider';
-import { AuthProvider, useAuth } from './providers/AuthProvider';
 import { BottomNav } from './components/BottomNav';
 import { LandingPage } from './screens/LandingPage';
 import { SplashScreen } from './screens/SplashScreen';
@@ -23,6 +21,7 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { LanguagePreferencesScreen } from './screens/LanguagePreferencesScreen';
 import { PrivacySafetyScreen } from './screens/PrivacySafetyScreen';
 import { HelpSupportScreen } from './screens/HelpSupportScreen';
+import { NotificationsScreen } from './screens/NotificationsScreen';
 import { mockConversations } from './data/mockData';
 import { Sidebar } from './components/Sidebar';
 import ScreenshotGallery from './ScreenshotGallery';
@@ -45,9 +44,10 @@ type Screen =
   | 'language-preferences'
   | 'privacy-safety'
   | 'help-support'
+  | 'notifications'
   | 'screenshot-gallery';
 
-function AppContent() {
+export default function App() {
   // Check URL for screenshot mode
   const isScreenshotMode = window.location.search.includes('screenshots') || window.location.hash.includes('screenshots');
   
@@ -55,9 +55,8 @@ function AppContent() {
     return <ScreenshotGallery />;
   }
 
-  const { user, loading: authLoading } = useAuth();
   const [showSplash, setShowSplash] = useState(false);
-  const isAuthenticated = !!user;
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -112,9 +111,9 @@ function AppContent() {
     setScreenHistory([]);
   };
 
-  // Handle login - auth state is managed by AuthProvider
+  // Handle login
   const handleLogin = () => {
-    // Navigation will happen automatically when auth state updates
+    setIsAuthenticated(true);
     setCurrentScreen('discover');
   };
 
@@ -123,8 +122,9 @@ function AppContent() {
     setCurrentScreen('signup');
   };
 
-  // Handle signup complete - auth state is managed by AuthProvider
+  // Handle signup complete
   const handleSignupComplete = () => {
+    setIsAuthenticated(true);
     setCurrentScreen('discover');
   };
 
@@ -134,9 +134,8 @@ function AppContent() {
   };
 
   // Handle logout
-  const { signOut } = useAuth();
-  const handleLogout = async () => {
-    await signOut();
+  const handleLogout = () => {
+    setIsAuthenticated(false);
     setCurrentScreen('login');
     setScreenHistory([]);
   };
@@ -326,6 +325,12 @@ function AppContent() {
                     onBack={navigateBack}
                   />
                 )}
+
+                {currentScreen === 'notifications' && (
+                  <NotificationsScreen
+                    onBack={navigateBack}
+                  />
+                )}
               </div>
 
               {/* Bottom Navigation */}
@@ -347,15 +352,5 @@ function AppContent() {
         </div>
       </div>
     </ThemeProvider>
-  );
-}
-
-export default function App() {
-  return (
-    <QueryProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </QueryProvider>
   );
 }

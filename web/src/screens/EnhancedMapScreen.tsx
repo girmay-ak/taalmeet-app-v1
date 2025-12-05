@@ -18,7 +18,9 @@ import {
   Star,
   Zap,
   Filter,
-  ChevronDown
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { mockPartners } from '../data/mockData';
@@ -72,6 +74,11 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
 
   const nearbyPartners = filteredPartners.filter(p => p.distance < (50 * zoomLevel / 100));
   const selected = selectedPartner ? mockPartners.find(p => p.id === selectedPartner) : null;
+  
+  // Get current partner index for swipe navigation
+  const currentPartnerIndex = selectedPartner ? nearbyPartners.findIndex(p => p.id === selectedPartner) : -1;
+  const canSwipeLeft = currentPartnerIndex > 0;
+  const canSwipeRight = currentPartnerIndex < nearbyPartners.length - 1;
 
   const hasActiveFilters = filters.languages.length > 0 || 
                           filters.maxDistance < 50 || 
@@ -460,22 +467,65 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
         </div>
 
         {/* Selected partner card */}
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {selected && viewMode === 'markers' && (
             <motion.div
+              key={selected.id}
               initial={{ y: 100, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 100, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               className="absolute bottom-4 left-4 right-4 z-30"
             >
-              <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-4 border border-white/20 shadow-2xl">
+              <motion.div
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.2}
+                onDragEnd={(e, info) => {
+                  if (info.offset.x > 100 && canSwipeRight) {
+                    // Swipe right - next partner
+                    setSelectedPartner(nearbyPartners[currentPartnerIndex + 1].id);
+                  } else if (info.offset.x < -100 && canSwipeLeft) {
+                    // Swipe left - previous partner
+                    setSelectedPartner(nearbyPartners[currentPartnerIndex - 1].id);
+                  }
+                }}
+                className="bg-white/10 backdrop-blur-xl rounded-2xl p-4 border border-white/20 shadow-2xl cursor-grab active:cursor-grabbing"
+              >
                 <button
                   onClick={() => setSelectedPartner(null)}
-                  className="absolute -top-2 -right-2 w-8 h-8 bg-[#2A2A2A] rounded-full flex items-center justify-center border-2 border-[#0F0F0F] shadow-lg"
+                  className="absolute -top-2 -right-2 w-8 h-8 bg-[#2A2A2A] rounded-full flex items-center justify-center border-2 border-[#0F0F0F] shadow-lg z-10"
                 >
                   <X className="w-4 h-4 text-white" />
                 </button>
+
+                {/* Navigation arrows */}
+                {canSwipeLeft && (
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setSelectedPartner(nearbyPartners[currentPartnerIndex - 1].id)}
+                    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-10 h-10 bg-gradient-to-r from-[#1DB954] to-[#1ED760] rounded-full flex items-center justify-center shadow-lg shadow-[#1DB954]/30 border-2 border-[#0F0F0F] z-10"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-white" />
+                  </motion.button>
+                )}
+                
+                {canSwipeRight && (
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setSelectedPartner(nearbyPartners[currentPartnerIndex + 1].id)}
+                    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-10 h-10 bg-gradient-to-r from-[#1DB954] to-[#1ED760] rounded-full flex items-center justify-center shadow-lg shadow-[#1DB954]/30 border-2 border-[#0F0F0F] z-10"
+                  >
+                    <ChevronRight className="w-5 h-5 text-white" />
+                  </motion.button>
+                )}
+
+                {/* Counter indicator */}
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-[#2A2A2A] rounded-full border border-white/20 shadow-lg">
+                  <span className="text-xs font-semibold text-white">
+                    {currentPartnerIndex + 1} / {nearbyPartners.length}
+                  </span>
+                </div>
 
                 <div className="flex gap-3">
                   <div className="relative flex-shrink-0">
@@ -524,7 +574,16 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
                     </div>
                   </div>
                 </div>
-              </div>
+
+                {/* Swipe indicator */}
+                <div className="flex items-center justify-center gap-1.5 mt-3 pt-3 border-t border-white/10">
+                  <div className="flex items-center gap-1 text-white/40 text-xs">
+                    <ChevronLeft className="w-3 h-3" />
+                    <span>Swipe</span>
+                    <ChevronRight className="w-3 h-3" />
+                  </div>
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
