@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
+import { QueryProvider } from './providers/QueryProvider';
+import { AuthProvider, useAuth } from './providers/AuthProvider';
 import { BottomNav } from './components/BottomNav';
 import { LandingPage } from './screens/LandingPage';
 import { SplashScreen } from './screens/SplashScreen';
@@ -45,7 +47,7 @@ type Screen =
   | 'help-support'
   | 'screenshot-gallery';
 
-export default function App() {
+function AppContent() {
   // Check URL for screenshot mode
   const isScreenshotMode = window.location.search.includes('screenshots') || window.location.hash.includes('screenshots');
   
@@ -53,8 +55,9 @@ export default function App() {
     return <ScreenshotGallery />;
   }
 
+  const { user, loading: authLoading } = useAuth();
   const [showSplash, setShowSplash] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const isAuthenticated = !!user;
   const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -109,9 +112,9 @@ export default function App() {
     setScreenHistory([]);
   };
 
-  // Handle login
+  // Handle login - auth state is managed by AuthProvider
   const handleLogin = () => {
-    setIsAuthenticated(true);
+    // Navigation will happen automatically when auth state updates
     setCurrentScreen('discover');
   };
 
@@ -120,9 +123,8 @@ export default function App() {
     setCurrentScreen('signup');
   };
 
-  // Handle signup complete
+  // Handle signup complete - auth state is managed by AuthProvider
   const handleSignupComplete = () => {
-    setIsAuthenticated(true);
     setCurrentScreen('discover');
   };
 
@@ -132,8 +134,9 @@ export default function App() {
   };
 
   // Handle logout
-  const handleLogout = () => {
-    setIsAuthenticated(false);
+  const { signOut } = useAuth();
+  const handleLogout = async () => {
+    await signOut();
     setCurrentScreen('login');
     setScreenHistory([]);
   };
@@ -344,5 +347,15 @@ export default function App() {
         </div>
       </div>
     </ThemeProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <QueryProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </QueryProvider>
   );
 }

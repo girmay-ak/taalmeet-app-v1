@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { TaalMeetLogo } from '../components/TaalMeetLogo';
 import { AnimatedBackground } from '../components/AnimatedBackground';
+import { useSignIn } from '../hooks/useAuth';
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -12,17 +13,28 @@ export function LoginScreen({ onLogin, onSignup }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const signInMutation = useSignIn();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    
-    // Simulate login
-    setTimeout(() => {
-      setIsLoading(false);
+    setError(null);
+
+    if (!email || !password) {
+      setError('Please enter both email and password');
+      return;
+    }
+
+    try {
+      await signInMutation.mutateAsync({
+        email,
+        password,
+      });
+      // On success, the mutation will update auth state and App.tsx will handle navigation
       onLogin();
-    }, 1000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to sign in. Please check your credentials.');
+    }
   };
 
   return (
@@ -99,6 +111,14 @@ export function LoginScreen({ onLogin, onSignup }: LoginScreenProps) {
               </div>
             </div>
 
+            {/* Error Message */}
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
             {/* Forgot Password */}
             <div className="flex justify-end">
               <button
@@ -112,10 +132,10 @@ export function LoginScreen({ onLogin, onSignup }: LoginScreenProps) {
             {/* Login Button */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={signInMutation.isPending}
               className="w-full py-4 bg-gradient-primary text-white rounded-xl font-semibold active:scale-[0.98] transition-transform disabled:opacity-50"
             >
-              {isLoading ? (
+              {signInMutation.isPending ? (
                 <div className="flex items-center justify-center gap-2">
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   <span>Logging in...</span>
