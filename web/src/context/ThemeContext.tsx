@@ -42,24 +42,39 @@ const colorThemes = {
 };
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [colorTheme, setColorThemeState] = useState<ColorTheme>(() => {
-    const saved = localStorage.getItem('taalmeet-color-theme');
-    return (saved as ColorTheme) || 'green';
-  });
+  // Initialize with default values (SSR-safe)
+  const [colorTheme, setColorThemeState] = useState<ColorTheme>('green');
+  const [mode, setModeState] = useState<Mode>('dark');
+  const [isHydrated, setIsHydrated] = useState(false);
 
-  const [mode, setModeState] = useState<Mode>(() => {
-    const saved = localStorage.getItem('taalmeet-mode');
-    return (saved as Mode) || 'dark';
-  });
+  // Load from localStorage after component mounts (client-side only)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedColorTheme = localStorage.getItem('taalmeet-color-theme') as ColorTheme;
+      const savedMode = localStorage.getItem('taalmeet-mode') as Mode;
+      
+      if (savedColorTheme) {
+        setColorThemeState(savedColorTheme);
+      }
+      if (savedMode) {
+        setModeState(savedMode);
+      }
+      setIsHydrated(true);
+    }
+  }, []);
 
   const setColorTheme = (newTheme: ColorTheme) => {
     setColorThemeState(newTheme);
-    localStorage.setItem('taalmeet-color-theme', newTheme);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('taalmeet-color-theme', newTheme);
+    }
   };
 
   const setMode = (newMode: Mode) => {
     setModeState(newMode);
-    localStorage.setItem('taalmeet-mode', newMode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('taalmeet-mode', newMode);
+    }
   };
 
   useEffect(() => {
