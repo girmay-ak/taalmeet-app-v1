@@ -57,6 +57,10 @@
           '@/shared/hooks': path.resolve(__dirname, '../hooks'),
           '@/shared/types': path.resolve(__dirname, '../types'),
           '@/shared/lib': path.resolve(__dirname, '../lib'),
+          // Alias for services to use web supabase client
+          '@/lib': path.resolve(__dirname, './src/lib'),
+          '@/utils': path.resolve(__dirname, '../utils'),
+          '@/types': path.resolve(__dirname, '../types'),
         },
       },
       build: {

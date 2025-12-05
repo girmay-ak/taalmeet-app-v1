@@ -4,7 +4,12 @@
  */
 
 import { supabase } from '../lib/supabase';
-import type { UploadResult } from '../../services/storageService';
+
+// Re-export types for consistency
+export interface UploadResult {
+  path: string;
+  publicUrl: string;
+}
 
 // ============================================================================
 // CONSTANTS
