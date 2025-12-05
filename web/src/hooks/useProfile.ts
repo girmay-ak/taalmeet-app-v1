@@ -68,11 +68,10 @@ export function useUpdateProfile() {
 
 export function useUpdateLanguages() {
   const queryClient = useQueryClient();
-  const { refreshProfile } = useAuthContext();
+  const { refreshProfile, user } = useAuthContext();
 
   return useMutation({
     mutationFn: async (input: profileService.UpdateLanguagesInput) => {
-      const { user } = useAuthContext();
       if (!user?.id) {
         throw new Error('User not authenticated');
       }
