@@ -8,7 +8,7 @@ import { SuccessScreen } from './SuccessScreen';
 import { useSignUp } from '../../hooks/useAuth';
 import { toast } from 'sonner';
 import * as profileService from '@/services/profileService';
-import * as storageService from '../services/storageService';
+import * as storageService from '@/services/storageService';
 
 interface SignupFlowProps {
   onComplete: () => void;
