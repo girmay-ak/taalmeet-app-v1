@@ -1,13 +1,18 @@
 
-  import { defineConfig } from 'vite';
+  import { defineConfig, loadEnv } from 'vite';
   import react from '@vitejs/plugin-react-swc';
   import path from 'path';
 
-  export default defineConfig({
-    plugins: [react()],
-    resolve: {
-      extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
-      alias: {
+  export default defineConfig(({ mode }) => {
+    // Load env file based on `mode` in the current working directory.
+    // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
+    const env = loadEnv(mode, process.cwd(), '');
+    
+    return {
+      plugins: [react()],
+      resolve: {
+        extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
+        alias: {
         'vaul@1.1.2': 'vaul',
         'sonner@2.0.3': 'sonner',
         'recharts@2.15.2': 'recharts',
@@ -46,20 +51,26 @@
         '@radix-ui/react-aspect-ratio@1.1.2': '@radix-ui/react-aspect-ratio',
         '@radix-ui/react-alert-dialog@1.1.6': '@radix-ui/react-alert-dialog',
         '@radix-ui/react-accordion@1.2.3': '@radix-ui/react-accordion',
-        '@': path.resolve(__dirname, './src'),
-        // Shared code aliases for monorepo structure
-        '@/shared': path.resolve(__dirname, '../services'),
-        '@/shared/hooks': path.resolve(__dirname, '../hooks'),
-        '@/shared/types': path.resolve(__dirname, '../types'),
-        '@/shared/lib': path.resolve(__dirname, '../lib'),
+          '@': path.resolve(__dirname, './src'),
+          // Shared code aliases for monorepo structure
+          '@/shared': path.resolve(__dirname, '../services'),
+          '@/shared/hooks': path.resolve(__dirname, '../hooks'),
+          '@/shared/types': path.resolve(__dirname, '../types'),
+          '@/shared/lib': path.resolve(__dirname, '../lib'),
+        },
       },
-    },
-    build: {
-      target: 'esnext',
-      outDir: 'build',
-    },
-    server: {
-      port: 3000,
-      open: true,
-    },
+      build: {
+        target: 'esnext',
+        outDir: 'build',
+      },
+      server: {
+        port: 3000,
+        open: true,
+      },
+      // Expose environment variables to the client
+      define: {
+        // Vite automatically exposes VITE_* variables via import.meta.env
+        // This is just for any additional defines if needed
+      },
+    };
   });
