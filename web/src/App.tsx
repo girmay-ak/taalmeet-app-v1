@@ -52,8 +52,15 @@ type Screen =
   | 'screenshot-gallery';
 
 function AppContent() {
-  // Check URL for screenshot mode
-  const isScreenshotMode = window.location.search.includes('screenshots') || window.location.hash.includes('screenshots');
+  // Check URL for screenshot mode (client-side only)
+  const [isScreenshotMode, setIsScreenshotMode] = useState(false);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isScreenshot = window.location.search.includes('screenshots') || window.location.hash.includes('screenshots');
+      setIsScreenshotMode(isScreenshot);
+    }
+  }, []);
   
   if (isScreenshotMode) {
     return <ScreenshotGallery />;
