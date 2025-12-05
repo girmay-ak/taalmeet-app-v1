@@ -76,17 +76,20 @@ export function useCurrentUser() {
  */
 export function useSignIn() {
   const queryClient = useQueryClient();
+  const { refreshProfile } = useAuthContext();
 
   return useMutation({
     mutationFn: (input: SignInInput) => authService.signIn(input),
-    onSuccess: () => {
+    onSuccess: async () => {
       // Invalidate and refetch auth data
       queryClient.invalidateQueries({ queryKey: authKeys.all });
+      // Refresh profile in AuthProvider
+      await refreshProfile();
       // Navigation will be handled by the component using this hook
     },
     onError: (error: any) => {
       console.error('Sign in failed:', error);
-      // You can add toast notification here
+      // Error handling is done in the component
     },
   });
 }
