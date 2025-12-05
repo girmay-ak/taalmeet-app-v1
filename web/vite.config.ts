@@ -7,20 +7,21 @@
     plugins: [react()],
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
-      alias: [
+      alias: {
         // Source directory
-        { find: '@', replacement: path.resolve(__dirname, './src') },
-        // Shared code from parent directory - must be more specific
-        { find: /^@\/shared\/(.*)$/, replacement: path.resolve(__dirname, '../$1') },
+        '@': path.resolve(__dirname, './src'),
+        // Shared services - direct mapping
+        '@/shared/services': path.resolve(__dirname, '../services'),
+        '@/shared/hooks': path.resolve(__dirname, '../hooks'),
+        '@/shared/types': path.resolve(__dirname, '../types'),
+        '@/shared/lib': path.resolve(__dirname, '../lib'),
+        '@/shared/utils': path.resolve(__dirname, '../utils'),
         // Map @/lib to web's lib for supabase (shared services will use web's supabase)
-        { find: /^@\/lib\/(.*)$/, replacement: path.resolve(__dirname, './src/lib/$1') },
-        { find: /^@\/lib$/, replacement: path.resolve(__dirname, './src/lib') },
+        '@/lib': path.resolve(__dirname, './src/lib'),
         // Map @/utils and @/types to parent for shared services
-        { find: /^@\/utils\/(.*)$/, replacement: path.resolve(__dirname, '../utils/$1') },
-        { find: /^@\/utils$/, replacement: path.resolve(__dirname, '../utils') },
-        { find: /^@\/types\/(.*)$/, replacement: path.resolve(__dirname, '../types/$1') },
-        { find: /^@\/types$/, replacement: path.resolve(__dirname, '../types') },
-      ],
+        '@/utils': path.resolve(__dirname, '../utils'),
+        '@/types': path.resolve(__dirname, '../types'),
+      },
     },
     build: {
       target: 'esnext',
