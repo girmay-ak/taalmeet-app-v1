@@ -10,8 +10,9 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY, validateEnvVars } from './config';
 // Validate environment variables on import
 validateEnvVars();
 
-const supabaseUrl = SUPABASE_URL!;
-const supabaseAnonKey = SUPABASE_ANON_KEY!;
+// Use placeholder values if not set (for development)
+const supabaseUrl = SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = SUPABASE_ANON_KEY || 'placeholder-key';
 
 /**
  * localStorage adapter for Supabase auth

@@ -55,6 +55,12 @@ export const APP_NAME = 'TaalMeet';
  * Throws an error if any required variables are missing
  */
 export function validateEnvVars(): void {
+  // Only validate in production or if explicitly enabled
+  // In development, allow missing values to prevent blocking startup
+  if (IS_DEV && process.env.NEXT_PUBLIC_SKIP_ENV_VALIDATION === 'true') {
+    return;
+  }
+
   const required: Record<string, string | undefined> = {
     NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
@@ -65,6 +71,28 @@ export function validateEnvVars(): void {
     .map(([key]) => key);
 
   if (missing.length > 0) {
+    // In development, log warning instead of throwing
+    if (IS_DEV) {
+      console.warn(`
+⚠️  Missing required environment variables: ${missing.join(', ')}
+
+Please create a .env.local file in the web/ directory with the required variables.
+
+Required variables:
+${Object.keys(required).map(key => `  - ${key}`).join('\n')}
+
+To get your Supabase credentials:
+1. Go to https://app.supabase.com
+2. Select your project
+3. Go to Settings > API
+4. Copy the "Project URL" and "anon public" key
+
+To skip this validation in development, add NEXT_PUBLIC_SKIP_ENV_VALIDATION=true to .env.local
+      `.trim());
+      return;
+    }
+
+    // In production, throw error
     const errorMessage = `
 Missing required environment variables: ${missing.join(', ')}
 
