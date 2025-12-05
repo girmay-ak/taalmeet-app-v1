@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { QueryProvider } from './providers/QueryProvider';
