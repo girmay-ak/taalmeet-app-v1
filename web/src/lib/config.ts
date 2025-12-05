@@ -61,7 +61,7 @@ export function validateEnvVars(): void {
   };
 
   const missing = Object.entries(required)
-    .filter(([_, value]) => !value)
+    .filter(([_, value]) => !value || value === 'your_supabase_url_here' || value === 'your_supabase_anon_key_here')
     .map(([key]) => key);
 
   if (missing.length > 0) {
@@ -73,6 +73,12 @@ See .env.example for reference.
 
 Required variables:
 ${Object.keys(required).map(key => `  - ${key}`).join('\n')}
+
+To get your Supabase credentials:
+1. Go to https://app.supabase.com
+2. Select your project
+3. Go to Settings > API
+4. Copy the "Project URL" and "anon public" key
     `.trim();
 
     throw new Error(errorMessage);
