@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
+import { QueryProvider } from './providers/QueryProvider';
+import { AuthProvider, useAuth } from './providers/AuthProvider';
 import { BottomNav } from './components/BottomNav';
 import { LandingPage } from './screens/LandingPage';
 import { SplashScreen } from './screens/SplashScreen';
@@ -47,7 +49,7 @@ type Screen =
   | 'notifications'
   | 'screenshot-gallery';
 
-export default function App() {
+function AppContent() {
   // Check URL for screenshot mode
   const isScreenshotMode = window.location.search.includes('screenshots') || window.location.hash.includes('screenshots');
   
@@ -55,9 +57,9 @@ export default function App() {
     return <ScreenshotGallery />;
   }
 
-  const [showSplash, setShowSplash] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
+  const { user, loading: authLoading } = useAuth();
+  const [showSplash, setShowSplash] = useState(true);
+  const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [screenHistory, setScreenHistory] = useState<Screen[]>(['landing']);
@@ -111,10 +113,12 @@ export default function App() {
     setScreenHistory([]);
   };
 
-  // Handle login
+  // Handle login - auth state is managed by AuthProvider
   const handleLogin = () => {
-    setIsAuthenticated(true);
-    setCurrentScreen('discover');
+    // Navigation will happen automatically based on auth state
+    if (user) {
+      setCurrentScreen('discover');
+    }
   };
 
   // Handle signup
@@ -122,10 +126,12 @@ export default function App() {
     setCurrentScreen('signup');
   };
 
-  // Handle signup complete
+  // Handle signup complete - auth state is managed by AuthProvider
   const handleSignupComplete = () => {
-    setIsAuthenticated(true);
-    setCurrentScreen('discover');
+    // Navigation will happen automatically based on auth state
+    if (user) {
+      setCurrentScreen('discover');
+    }
   };
 
   // Handle back to login
@@ -134,17 +140,39 @@ export default function App() {
   };
 
   // Handle logout
-  const handleLogout = () => {
-    setIsAuthenticated(false);
+  const handleLogout = async () => {
+    // Sign out is handled by AuthProvider
     setCurrentScreen('login');
     setScreenHistory([]);
   };
 
+  // Auto-navigate based on auth state
+  useEffect(() => {
+    if (!authLoading) {
+      if (user && (currentScreen === 'login' || currentScreen === 'signup' || currentScreen === 'splash')) {
+        setCurrentScreen('discover');
+      } else if (!user && currentScreen !== 'landing' && currentScreen !== 'login' && currentScreen !== 'signup' && currentScreen !== 'splash') {
+        setCurrentScreen('login');
+      }
+    }
+  }, [user, authLoading, currentScreen]);
+
   // Show splash screen
-  if (showSplash) {
+  if (showSplash || currentScreen === 'splash') {
     return (
       <ThemeProvider>
-        <SplashScreen onComplete={() => setShowSplash(false)} />
+        <SplashScreen 
+          onComplete={() => {
+            setShowSplash(false);
+            if (user) {
+              setCurrentScreen('discover');
+            } else {
+              setCurrentScreen('login');
+            }
+          }}
+          onNavigateToLogin={() => setCurrentScreen('login')}
+          onNavigateToHome={() => setCurrentScreen('discover')}
+        />
       </ThemeProvider>
     );
   }
@@ -162,7 +190,7 @@ export default function App() {
   }
 
   // Show signup flow
-  if (!isAuthenticated && currentScreen === 'signup') {
+  if (!user && currentScreen === 'signup') {
     return (
       <ThemeProvider>
         <SignupFlow
@@ -174,7 +202,7 @@ export default function App() {
   }
 
   // Show login screen if not authenticated
-  if (!isAuthenticated && currentScreen === 'login') {
+  if (!user && currentScreen === 'login') {
     return (
       <ThemeProvider>
         <LoginScreen
@@ -352,5 +380,16 @@ export default function App() {
         </div>
       </div>
     </ThemeProvider>
+  );
+}
+
+// Main App component with providers
+export default function App() {
+  return (
+    <QueryProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </QueryProvider>
   );
 }
