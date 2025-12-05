@@ -6,6 +6,7 @@ import { AnimatedBackground } from '../../components/AnimatedBackground';
 interface SignupStep4Props {
   onNext: (data: { bio: string; interests: string[]; avatar?: string }) => void;
   onBack: () => void;
+  isSubmitting?: boolean;
 }
 
 const INTERESTS = [
@@ -15,7 +16,7 @@ const INTERESTS = [
   '🍷 Wine', '🎭 Theater', '🌿 Nature', '💻 Technology'
 ];
 
-export function SignupStep4({ onNext, onBack }: SignupStep4Props) {
+export function SignupStep4({ onNext, onBack, isSubmitting = false }: SignupStep4Props) {
   const [bio, setBio] = useState('');
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -194,10 +195,17 @@ export function SignupStep4({ onNext, onBack }: SignupStep4Props) {
               {/* Submit Button */}
               <button
                 onClick={handleSubmit}
-                disabled={!canProceed}
+                disabled={!canProceed || isSubmitting}
                 className="w-full py-4 bg-gradient-primary text-white rounded-xl font-semibold active:scale-[0.98] transition-transform disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Create Account 🎉
+                {isSubmitting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Creating Account...</span>
+                  </>
+                ) : (
+                  'Create Account 🎉'
+                )}
               </button>
             </motion.div>
           </div>
