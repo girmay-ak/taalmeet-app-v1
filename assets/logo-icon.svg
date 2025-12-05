@@ -1,0 +1,29 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- TaalMeet App Icon: Square version for app icons -->
+  
+  <!-- Background Circle (optional, can be transparent) -->
+  <circle cx="512" cy="512" r="480" fill="#4FD1C5" opacity="0.1"/>
+  
+  <!-- Location Pin (Teal) - Centered and scaled -->
+  <path d="M 512 100 C 300 100 150 250 150 460 C 150 670 512 900 512 900 C 512 900 874 670 874 460 C 874 250 724 100 512 100 Z" 
+        fill="#4FD1C5" 
+        stroke="#2A9D8F" 
+        stroke-width="8"/>
+  
+  <!-- Speech Bubble (White) inside pin -->
+  <ellipse cx="512" cy="400" rx="230" ry="180" fill="#FFFFFF"/>
+  
+  <!-- Left Person Profile (Dark Blue) -->
+  <path d="M 380 360 Q 380 310 430 310 Q 460 310 460 360 Q 460 385 430 385 L 430 435 Q 430 460 405 460 Q 380 460 380 435 Z" 
+        fill="#1E3A5F"/>
+  
+  <!-- Right Person Profile (Dark Blue) -->
+  <path d="M 644 360 Q 644 310 594 310 Q 564 310 564 360 Q 564 385 594 385 L 594 435 Q 594 460 619 460 Q 644 460 644 435 Z" 
+        fill="#1E3A5F"/>
+  
+  <!-- Conversation Dots (Orange-Yellow) -->
+  <circle cx="485" cy="385" r="12" fill="#FFA500"/>
+  <circle cx="512" cy="385" r="12" fill="#FFA500"/>
+  <circle cx="539" cy="385" r="12" fill="#FFA500"/>
+</svg>
+

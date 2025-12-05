@@ -7,7 +7,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { router } from 'expo-router';
-import { FlowingWavesRN } from '@/components';
+import { FlowingWavesRN, TaalMeetLogo } from '@/components';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import { spacing, textStyles } from '@/lib/theme';
 
@@ -85,10 +85,8 @@ export default function SplashScreen() {
         />
 
         {/* Logo Card */}
-        <View style={[styles.logoCard, { backgroundColor: colors.primary }]}>
-          <View style={styles.logoPlaceholder}>
-            <Text style={[styles.logoText, { color: '#FFFFFF' }]}>💬</Text>
-          </View>
+        <View style={[styles.logoCard, { backgroundColor: 'transparent' }]}>
+          <TaalMeetLogo size={100} variant="icon" />
         </View>
       </Animated.View>
 
