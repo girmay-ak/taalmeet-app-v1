@@ -7,7 +7,7 @@ import { SignupStep4 } from './SignupStep4';
 import { SuccessScreen } from './SuccessScreen';
 import { useSignUp } from '../../hooks/useAuth';
 import { toast } from 'sonner';
-import * as profileService from '@/shared/profileService';
+import * as profileService from '@/services/profileService';
 import * as storageService from '../services/storageService';
 
 interface SignupFlowProps {

@@ -74,8 +74,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       try {
         // Import profile service dynamically to avoid circular dependencies
-        // Use alias path to shared services (@/shared already points to services/)
-        const profileService = await import('@/shared/profileService');
+        // Use alias path to services
+        const profileService = await import('@/services/profileService');
         const userProfile = await profileService.getCurrentUserProfile();
         
         if (isMounted.current) {
@@ -147,7 +147,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (session?.user && isMounted.current) {
       setProfileLoading(true);
       try {
-        const profileService = await import('@/shared/profileService');
+        const profileService = await import('@/services/profileService');
         const userProfile = await profileService.getCurrentUserProfile();
         if (isMounted.current) {
           setProfile(userProfile);

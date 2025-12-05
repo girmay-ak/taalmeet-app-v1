@@ -61,6 +61,8 @@
           '@/lib': path.resolve(__dirname, './src/lib'),
           '@/utils': path.resolve(__dirname, '../utils'),
           '@/types': path.resolve(__dirname, '../types'),
+          // Direct service aliases (for easier imports)
+          '@/services': path.resolve(__dirname, '../services'),
         },
       },
       build: {
