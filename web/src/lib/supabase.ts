@@ -4,7 +4,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/shared/types/database';
+import type { Database } from '@/types/database';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, validateEnvVars } from './config';
 
 // Validate environment variables on import
