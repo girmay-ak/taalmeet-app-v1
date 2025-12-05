@@ -11,11 +11,12 @@
         // Source directory
         '@': path.resolve(__dirname, './src'),
         // Shared code from parent directory
-        '@/shared/services': path.resolve(__dirname, '../services'),
-        '@/shared/hooks': path.resolve(__dirname, '../hooks'),
-        '@/shared/types': path.resolve(__dirname, '../types'),
-        '@/shared/lib': path.resolve(__dirname, '../lib'),
-        '@/shared/utils': path.resolve(__dirname, '../utils'),
+        '@/shared': path.resolve(__dirname, '..'),
+        // Map @/lib to web's lib for supabase (shared services will use web's supabase)
+        '@/lib': path.resolve(__dirname, './src/lib'),
+        // Map @/utils and @/types to parent for shared services
+        '@/utils': path.resolve(__dirname, '../utils'),
+        '@/types': path.resolve(__dirname, '../types'),
       },
     },
     build: {
