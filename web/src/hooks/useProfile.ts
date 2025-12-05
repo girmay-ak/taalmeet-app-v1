@@ -5,7 +5,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import * as profileService from '@/shared/services/profileService';
+import * as profileService from '@/shared/profileService';
 import { useAuthContext } from './useAuth';
 
 // ============================================================================

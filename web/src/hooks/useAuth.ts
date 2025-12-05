@@ -4,9 +4,9 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as authService from '@/shared/services/authService';
-import * as profileService from '@/shared/services/profileService';
-import type { SignInInput } from '@/shared/services/authService';
+import * as authService from '@/shared/authService';
+import * as profileService from '@/shared/profileService';
+import type { SignInInput } from '@/shared/authService';
 
 // Re-export the auth context hook
 export { useAuth as useAuthContext } from '../providers/AuthProvider';
