@@ -10,11 +10,15 @@ module.exports = {
     extend: {
       colors: {
         background: 'var(--color-background)',
-        foreground: 'var(--color-foreground)',
+        foreground: 'var(--color-text)',
         card: 'var(--color-card)',
+        border: 'var(--color-border)',
+        primary: 'var(--color-primary)',
+        secondary: 'var(--color-secondary)',
+        accent: 'var(--color-accent)',
+        muted: 'var(--color-text-muted)',
       },
     },
   },
   plugins: [],
 }
-
