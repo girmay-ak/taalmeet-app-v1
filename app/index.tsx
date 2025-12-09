@@ -6,19 +6,31 @@ import { useTheme } from '@/lib/theme/ThemeProvider';
 
 export default function Index() {
   const { colors } = useTheme();
-  const { session, loading } = useAuth();
+  const { session, profile, loading } = useAuth();
 
   useEffect(() => {
     if (!loading) {
       if (session) {
-        // User is logged in, redirect to main app
-        router.replace('/(tabs)');
+        // Only navigate to main app if profile is loaded
+        // This prevents navigation before profile data is available
+        if (profile) {
+          router.replace('/(tabs)');
+        }
+        // If no profile after loading is complete, still navigate
+        // (edge case: profile fetch failed but user is authenticated)
+        else {
+          // Give it a moment to load
+          const timer = setTimeout(() => {
+            router.replace('/(tabs)');
+          }, 500);
+          return () => clearTimeout(timer);
+        }
       } else {
         // User is not logged in, redirect to sign in
         router.replace('/(auth)/sign-in');
       }
     }
-  }, [session, loading]);
+  }, [session, profile, loading]);
 
   // Show loading screen while checking authentication
   return (

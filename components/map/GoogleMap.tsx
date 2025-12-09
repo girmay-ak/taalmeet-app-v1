@@ -3,7 +3,7 @@
  * Fallback map implementation using react-native-maps
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { GOOGLE_MAPS_API_KEY } from '@/lib/config';
@@ -168,21 +168,74 @@ export function GoogleMap({
         )}
 
         {/* User markers */}
-        {users.map((user) => {
-          const isOnline = user.isOnline ?? false;
-          const teachingLang = getTeachingLanguage(user);
+        {useMemo(() => {
+          // Remove duplicates by ID first
+          const uniqueUsers = users.filter((user, index, self) => 
+            index === self.findIndex((u) => u.id === user.id)
+          );
 
-          return (
-            <Marker
-              key={user.id}
-              coordinate={{
-                latitude: user.lat,
-                longitude: user.lng,
-              }}
-              onPress={() => onUserPress?.(user)}
-              title={user.displayName}
-              description={teachingLang}
-            >
+          return uniqueUsers
+            .filter((user) => {
+              // Validate coordinates before rendering
+              if (!user.lat || !user.lng) {
+                console.warn('[GoogleMap] User missing coordinates:', user.id, user.displayName);
+                return false;
+              }
+              if (isNaN(user.lat) || isNaN(user.lng)) {
+                console.warn('[GoogleMap] User has invalid coordinates:', user.id, user.displayName);
+                return false;
+              }
+              return true;
+            })
+            .map((user, index) => {
+            const isOnline = user.isOnline ?? false;
+            const teachingLang = getTeachingLanguage(user);
+            
+            // Ensure coordinates are valid numbers
+            const lat = typeof user.lat === 'number' ? user.lat : parseFloat(String(user.lat));
+            const lng = typeof user.lng === 'number' ? user.lng : parseFloat(String(user.lng));
+
+            // Add small offset for overlapping markers (if coordinates are too close)
+            // This ensures markers at the same location are visible
+            const offset = index * 0.00001; // Small offset (about 1 meter per marker)
+            // Only add offset if coordinates are very close (within ~10 meters)
+            // Check if there are other markers with similar coordinates (use uniqueUsers from parent scope)
+            const hasNearbyMarker = uniqueUsers.some((otherUser, otherIndex) => {
+              if (otherIndex === index || otherUser.id === user.id) return false;
+              const otherLat = typeof otherUser.lat === 'number' ? otherUser.lat : parseFloat(String(otherUser.lat));
+              const otherLng = typeof otherUser.lng === 'number' ? otherUser.lng : parseFloat(String(otherUser.lng));
+              if (isNaN(otherLat) || isNaN(otherLng)) return false;
+              const latDiff = Math.abs(lat - otherLat);
+              const lngDiff = Math.abs(lng - otherLng);
+              // If coordinates are within ~0.0001 degrees (~10 meters), add offset
+              return latDiff < 0.0001 && lngDiff < 0.0001;
+            });
+
+            let finalLat = lat;
+            let finalLng = lng;
+            
+            if (hasNearbyMarker) {
+              // Add small offset in spiral pattern for overlapping markers
+              const offsetDistance = 0.00005 * (index % 6); // Max 6 markers in spiral
+              const angle = (index * 60) * (Math.PI / 180); // 60 degrees between markers
+              finalLat = lat + (offsetDistance * Math.cos(angle));
+              finalLng = lng + (offsetDistance * Math.sin(angle));
+            }
+
+            return (
+              <Marker
+                key={`marker-${user.id}`}
+                identifier={`marker-${user.id}`}
+                coordinate={{
+                  latitude: finalLat,
+                  longitude: finalLng,
+                }}
+                onPress={() => onUserPress?.(user)}
+                title={user.displayName}
+                description={teachingLang}
+                tracksViewChanges={false}
+                zIndex={index}
+              >
               <View style={styles.markerContainer}>
                 <View
                   style={[
@@ -215,8 +268,9 @@ export function GoogleMap({
                 {isOnline && <View style={styles.onlineIndicator} />}
               </View>
             </Marker>
-          );
-        })}
+            );
+            });
+        }, [users])}
       </MapView>
     </View>
   );

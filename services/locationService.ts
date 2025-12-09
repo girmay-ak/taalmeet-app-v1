@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import {
   DatabaseError,
   ValidationError,
+  RecordNotFoundError,
   parseSupabaseError,
 } from '@/utils/errors';
 import type { Profile, UserLanguage } from '@/types/database';
@@ -50,6 +51,9 @@ export async function updateUserLocation(
   lng: number
 ): Promise<Profile> {
   // Validate coordinates
+  if (isNaN(lat) || isNaN(lng)) {
+    throw new ValidationError('Invalid coordinates provided');
+  }
   if (lat < -90 || lat > 90) {
     throw new ValidationError('Invalid latitude. Must be between -90 and 90.');
   }
@@ -77,9 +81,15 @@ export async function updateUserLocation(
     .single();
 
   if (error) {
+    console.error('[updateUserLocation] Error updating profile:', error);
     throw parseSupabaseError(error);
   }
 
+  if (!data) {
+    throw new RecordNotFoundError('Profile not found after update');
+  }
+
+  console.log('[updateUserLocation] Location updated successfully:', { userId: user.id, lat, lng });
   return data;
 }
 
@@ -149,6 +159,8 @@ export async function getNearbyUsers(
     currentUserId = user.id;
   }
 
+  // Current user ID is set
+
   // Get current user's location
   const { data: currentUser, error: userError } = await supabase
     .from('profiles')
@@ -181,13 +193,15 @@ export async function getNearbyUsers(
       last_active_at,
       languages:user_languages(*)
     `)
-    .neq('id', currentUserId)
+    .neq('id', currentUserId) // Exclude current user
     .not('lat', 'is', null)
     .not('lng', 'is', null)
     .gte('lat', userLat - latBuffer)
     .lte('lat', userLat + latBuffer)
     .gte('lng', userLng - lngBuffer)
     .lte('lng', userLng + lngBuffer);
+
+  // Query filters applied
 
   // Filter by availability status
   if (availability === 'now') {
@@ -204,6 +218,12 @@ export async function getNearbyUsers(
 
   if (!profiles || profiles.length === 0) {
     return [];
+  }
+
+  // Warn if current user appears in query results (should never happen)
+  const includesCurrentUser = profiles.some(p => p.id === currentUserId);
+  if (includesCurrentUser) {
+    console.warn('[getNearbyUsers] Current user found in raw query results! This should not happen.');
   }
 
   // Get availability statuses for all profiles
@@ -227,6 +247,12 @@ export async function getNearbyUsers(
   const usersWithDistance: NearbyUser[] = [];
 
   for (const profile of profiles) {
+    // Double-check: exclude current user (safety check in case query filter didn't work)
+    if (profile.id === currentUserId) {
+      console.warn('[getNearbyUsers] Current user found in results, skipping:', profile.id, profile.display_name);
+      continue;
+    }
+
     if (!profile.lat || !profile.lng) continue;
 
     // Calculate distance using Haversine formula
@@ -281,10 +307,8 @@ export async function getNearbyUsers(
         continue;
       }
     } else if (availability === 'all') {
-      // Show all except offline users by default
-      if (effectiveStatus === 'offline') {
-        continue;
-      }
+      // Show all users regardless of availability status
+      // Don't filter out any users when "all" is selected
     }
 
     // Filter by meeting type if specified
@@ -312,8 +336,19 @@ export async function getNearbyUsers(
     });
   }
 
+  // Final safety check: filter out current user (should never happen, but just in case)
+  const finalResults = usersWithDistance.filter(user => {
+    if (user.id === currentUserId) {
+      console.warn('[getNearbyUsers] Current user found in final results, removing:', user.id, user.displayName);
+      return false;
+    }
+    return true;
+  });
+
+  // Results filtered and sorted
+
   // Sort by distance (closest first)
-  return usersWithDistance.sort((a, b) => a.distanceKm - b.distanceKm);
+  return finalResults.sort((a, b) => a.distanceKm - b.distanceKm);
 }
 
 // ============================================================================

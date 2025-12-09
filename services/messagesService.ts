@@ -427,6 +427,30 @@ export async function sendMessage(
 }
 
 // ============================================================================
+// SEND MESSAGE TO USER (Helper)
+// ============================================================================
+
+/**
+ * Send a message to a user (creates conversation if needed)
+ * This is a convenience function that combines createConversation and sendMessage
+ */
+export async function sendMessageToUser(
+  senderId: string,
+  receiverId: string,
+  text: string
+): Promise<Message> {
+  if (ENABLE_LOGGING) {
+    console.log('[messagesService] sendMessageToUser called:', { senderId, receiverId, text: text.substring(0, 50) });
+  }
+
+  // Get or create conversation
+  const conversationId = await createConversation(senderId, receiverId);
+
+  // Send message in the conversation
+  return sendMessage(conversationId, text, senderId);
+}
+
+// ============================================================================
 // CREATE CONVERSATION
 // ============================================================================
 

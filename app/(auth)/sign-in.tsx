@@ -42,6 +42,10 @@ export default function SignInScreen() {
   });
 
   const onSubmit = (data: SignInInput) => {
+    // Prevent duplicate submissions
+    if (signInMutation.isPending) {
+      return;
+    }
     // The useSignIn hook handles success navigation and error alerts
     signInMutation.mutate(data);
   };

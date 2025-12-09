@@ -174,7 +174,10 @@ export function usePushNotificationsSetup() {
         // Get Expo push token
         const token = await notificationService.getExpoPushToken();
         if (!token) {
-          console.log('Failed to get Expo push token');
+          // Silently skip in development if no token (expected when no projectId)
+          if (!__DEV__) {
+            console.log('Failed to get Expo push token');
+          }
           return;
         }
 

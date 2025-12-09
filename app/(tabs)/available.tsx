@@ -232,14 +232,23 @@ export default function AvailableScreen() {
           }
           
           // Update location if we have coordinates
-          if (locationToUse) {
-          await updateLocationMutation.mutateAsync({
-              lat: locationToUse.latitude,
-              lng: locationToUse.longitude,
-          });
+          if (locationToUse && locationToUse.latitude && locationToUse.longitude) {
+            console.log('Updating user location:', { lat: locationToUse.latitude, lng: locationToUse.longitude });
+            try {
+              await updateLocationMutation.mutateAsync({
+                lat: locationToUse.latitude,
+                lng: locationToUse.longitude,
+              });
+              console.log('Location updated successfully');
+            } catch (locationError) {
+              console.error('Failed to update location:', locationError);
+              Alert.alert('Location Update Failed', 'Your availability was saved, but location update failed. You may not appear on the map.');
+            }
+          } else {
+            console.warn('No valid location provided for update');
           }
         } catch (error) {
-          console.warn('Failed to update location:', error);
+          console.error('Error in location update block:', error);
           // Don't fail the whole operation if location update fails
         }
       }

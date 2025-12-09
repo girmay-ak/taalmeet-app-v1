@@ -134,6 +134,52 @@ export async function getConnectionRequests(userId: string): Promise<ConnectionW
 }
 
 /**
+ * Get sent pending requests (pending requests where user is the initiator)
+ */
+export async function getSentConnectionRequests(userId: string): Promise<ConnectionWithProfile[]> {
+  // Get connections where current user is the initiator (sent requests)
+  const { data: connections, error: connError } = await supabase
+    .from('connections')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+  if (connError) {
+    throw parseSupabaseError(connError);
+  }
+
+  if (!connections || connections.length === 0) {
+    return [];
+  }
+
+  // Get profiles for all request recipients
+  const partnerIds = connections.map(c => c.partner_id);
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select(`
+      *,
+      languages:user_languages(*)
+    `)
+    .in('id', partnerIds);
+
+  if (profilesError) {
+    throw parseSupabaseError(profilesError);
+  }
+
+  // Combine connections with profiles
+  const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+  
+  const sentRequestsWithProfiles = connections.map(conn => ({
+    ...conn,
+    partner: profileMap.get(conn.partner_id)!,
+  })).filter(item => item.partner) as ConnectionWithProfile[];
+
+  // Filter out blocked users
+  return await excludeBlockedUsers(userId, sentRequestsWithProfiles);
+}
+
+/**
  * Get suggested connections based on language compatibility
  */
 export async function getSuggestedConnections(userId: string, limit: number = 20): Promise<SuggestedConnection[]> {

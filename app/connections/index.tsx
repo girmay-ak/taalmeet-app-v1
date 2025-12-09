@@ -18,21 +18,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import { useConnections } from '@/hooks/useConnections';
+import { useAcceptRequest, useRejectRequest, useSendConnectionRequest } from '@/hooks/useConnections';
 import { getLanguageFlag } from '@/utils/languageFlags';
+import { useAuth } from '@/providers';
 
 type TabType = 'connections' | 'requests' | 'suggested';
 
 export default function ConnectionsScreen() {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('connections');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch connections data
-  const { data: connections = [], isLoading } = useConnections();
-
-  // Mock data for now - replace with actual data
-  const requests = [];
-  const suggested = [];
+  // Fetch connections data from backend
+  const { connections, requests, suggested, isLoading } = useConnections(user?.id);
+  
+  // Mutations
+  const acceptRequestMutation = useAcceptRequest();
+  const rejectRequestMutation = useRejectRequest();
+  const sendRequestMutation = useSendConnectionRequest();
 
   const tabs = [
     { id: 'connections' as TabType, label: 'Connections', count: connections.length },
@@ -40,12 +44,23 @@ export default function ConnectionsScreen() {
     { id: 'suggested' as TabType, label: 'Suggested', count: suggested.length },
   ];
 
+  // Transform data based on tab type
+  // Connections and requests have ConnectionWithProfile structure (with partner property)
+  // Suggested has SuggestedConnection structure (direct profile)
   const getCurrentData = () => {
     switch (activeTab) {
       case 'connections':
-        return connections;
+        return connections.map((conn: any) => ({
+          ...conn.partner,
+          connectionId: conn.id,
+          matchScore: conn.match_score,
+        }));
       case 'requests':
-        return requests;
+        return requests.map((req: any) => ({
+          ...req.partner,
+          connectionId: req.id,
+          matchScore: req.match_score,
+        }));
       case 'suggested':
         return suggested;
       default:
@@ -53,8 +68,9 @@ export default function ConnectionsScreen() {
     }
   };
 
-  const filteredData = getCurrentData().filter((item: any) =>
-    item.displayName?.toLowerCase().includes(searchQuery.toLowerCase())
+  const currentData = getCurrentData();
+  const filteredData = currentData.filter((item: any) =>
+    (item.display_name || item.displayName || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -203,17 +219,21 @@ export default function ConnectionsScreen() {
                     </View>
 
                     <View style={styles.partnerMeta}>
+                      {(partner.distanceKm || partner.distance_km) && (
+                        <>
+                          <Text style={[styles.partnerMetaText, { color: colors.text.muted }]}>
+                            {(partner.distanceKm || partner.distance_km).toFixed(1)}km away
+                          </Text>
+                          <Text style={[styles.metaDot, { color: colors.text.muted }]}>•</Text>
+                        </>
+                      )}
                       <Text style={[styles.partnerMetaText, { color: colors.text.muted }]}>
-                        {partner.distanceKm ? `${partner.distanceKm.toFixed(1)}km away` : ''}
-                      </Text>
-                      {partner.distanceKm && <Text style={[styles.metaDot, { color: colors.text.muted }]}>•</Text>}
-                      <Text style={[styles.partnerMetaText, { color: colors.text.muted }]}>
-                        {partner.lastActive || 'Recently active'}
+                        {partner.last_active || partner.lastActive || 'Recently active'}
                       </Text>
                     </View>
 
                     {/* Languages */}
-                    {partner.languages && (
+                    {partner.languages && Array.isArray(partner.languages) && partner.languages.length > 0 && (
                       <View style={styles.languagesRow}>
                         {partner.languages
                           .filter((l: any) => l.role === 'teaching')
@@ -269,6 +289,15 @@ export default function ConnectionsScreen() {
                       <View style={styles.actionButtons}>
                         <TouchableOpacity
                           style={[styles.actionButton, { backgroundColor: colors.primary }]}
+                          onPress={async () => {
+                            if (partner.connectionId) {
+                              try {
+                                await acceptRequestMutation.mutateAsync(partner.connectionId);
+                              } catch (error) {
+                                console.error('Failed to accept request:', error);
+                              }
+                            }
+                          }}
                         >
                           <Text style={styles.actionButtonText}>Accept</Text>
                         </TouchableOpacity>
@@ -278,6 +307,15 @@ export default function ConnectionsScreen() {
                             styles.actionButtonSecondary,
                             { borderColor: colors.border.default },
                           ]}
+                          onPress={async () => {
+                            if (partner.connectionId) {
+                              try {
+                                await rejectRequestMutation.mutateAsync(partner.connectionId);
+                              } catch (error) {
+                                console.error('Failed to reject request:', error);
+                              }
+                            }
+                          }}
                         >
                           <Text style={[styles.actionButtonTextSecondary, { color: colors.text.primary }]}>
                             Decline
@@ -290,6 +328,15 @@ export default function ConnectionsScreen() {
                       <View style={styles.actionButtons}>
                         <TouchableOpacity
                           style={[styles.actionButton, { backgroundColor: colors.primary }]}
+                          onPress={async () => {
+                            if (partner.id) {
+                              try {
+                                await sendRequestMutation.mutateAsync(partner.id);
+                              } catch (error) {
+                                console.error('Failed to send connection request:', error);
+                              }
+                            }
+                          }}
                         >
                           <Ionicons name="person-add-outline" size={16} color="#FFFFFF" />
                           <Text style={styles.actionButtonText}>Connect</Text>
