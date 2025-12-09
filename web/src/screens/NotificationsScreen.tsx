@@ -16,97 +16,13 @@ import {
   Filter,
   CheckCheck
 } from 'lucide-react';
-
-interface Notification {
-  id: string;
-  type: 'match' | 'message' | 'connection' | 'session' | 'achievement' | 'reminder';
-  title: string;
-  message: string;
-  time: string;
-  read: boolean;
-  avatar?: string;
-  icon?: 'heart' | 'message' | 'user' | 'calendar' | 'star' | 'sparkles';
-}
-
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    type: 'match',
-    title: 'New Match!',
-    message: 'You matched with Sophie Martin (95% match)',
-    time: '2 min ago',
-    read: false,
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-    icon: 'heart'
-  },
-  {
-    id: '2',
-    type: 'message',
-    title: 'New Message',
-    message: 'Emma: "Looking forward to our session tomorrow!"',
-    time: '15 min ago',
-    read: false,
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
-    icon: 'message'
-  },
-  {
-    id: '3',
-    type: 'connection',
-    title: 'Connection Accepted',
-    message: 'Marco Silva accepted your connection request',
-    time: '1 hour ago',
-    read: false,
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-    icon: 'user'
-  },
-  {
-    id: '4',
-    type: 'session',
-    title: 'Session Reminder',
-    message: 'Your Spanish practice session with Emma starts in 30 minutes',
-    time: '2 hours ago',
-    read: true,
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
-    icon: 'calendar'
-  },
-  {
-    id: '5',
-    type: 'achievement',
-    title: 'Achievement Unlocked! 🎉',
-    message: 'You completed 10 language sessions!',
-    time: '3 hours ago',
-    read: true,
-    icon: 'star'
-  },
-  {
-    id: '6',
-    type: 'match',
-    title: 'New Match Nearby',
-    message: 'Alex Chen (88% match) is 2.5km away',
-    time: '5 hours ago',
-    read: true,
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-    icon: 'heart'
-  },
-  {
-    id: '7',
-    type: 'reminder',
-    title: 'Update Your Availability',
-    message: 'Let partners know when you\'re free this week',
-    time: '1 day ago',
-    read: true,
-    icon: 'calendar'
-  },
-  {
-    id: '8',
-    type: 'achievement',
-    title: 'Premium Feature Available',
-    message: 'Upgrade to unlock unlimited swipes and advanced filters',
-    time: '2 days ago',
-    read: true,
-    icon: 'sparkles'
-  }
-];
+import { 
+  useNotifications, 
+  useMarkNotificationAsRead, 
+  useMarkAllNotificationsAsRead, 
+  useDeleteNotification 
+} from '../hooks/useNotifications';
+import type { InAppNotification } from '../hooks/useNotifications';
 
 interface NotificationsScreenProps {
   onBack?: () => void;
@@ -114,8 +30,13 @@ interface NotificationsScreenProps {
 }
 
 export function NotificationsScreen({ onBack, onNotificationClick }: NotificationsScreenProps) {
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  
+  // Get notifications from backend
+  const { data: notifications = [], isLoading } = useNotifications();
+  const markAsReadMutation = useMarkNotificationAsRead();
+  const markAllAsReadMutation = useMarkAllNotificationsAsRead();
+  const deleteNotificationMutation = useDeleteNotification();
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -123,21 +44,20 @@ export function NotificationsScreen({ onBack, onNotificationClick }: Notificatio
     ? notifications.filter(n => !n.read)
     : notifications;
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
+  const handleMarkAsRead = (id: string) => {
+    markAsReadMutation.mutate(id);
+    onNotificationClick?.(id);
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  const handleMarkAllAsRead = () => {
+    markAllAsReadMutation.mutate();
   };
 
-  const deleteNotification = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
+  const handleDeleteNotification = (id: string) => {
+    deleteNotificationMutation.mutate(id);
   };
 
-  const getIcon = (type: Notification['icon']) => {
+  const getIcon = (type: InAppNotification['icon']) => {
     switch (type) {
       case 'heart':
         return Heart;
@@ -156,7 +76,7 @@ export function NotificationsScreen({ onBack, onNotificationClick }: Notificatio
     }
   };
 
-  const getIconColor = (type: Notification['type']) => {
+  const getIconColor = (type: InAppNotification['type']) => {
     switch (type) {
       case 'match':
         return 'from-[#EF4444] to-[#F87171]';
@@ -164,6 +84,8 @@ export function NotificationsScreen({ onBack, onNotificationClick }: Notificatio
         return 'from-[#1DB954] to-[#1ED760]';
       case 'connection':
         return 'from-[#5FB3B3] to-[#4FD1C5]';
+      case 'connection_accepted':
+        return 'from-[#10B981] to-[#34D399]';
       case 'session':
         return 'from-[#F59E0B] to-[#FCD34D]';
       case 'achievement':
@@ -213,8 +135,9 @@ export function NotificationsScreen({ onBack, onNotificationClick }: Notificatio
             {unreadCount > 0 && (
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                onClick={markAllAsRead}
-                className="px-4 py-2 rounded-xl flex items-center gap-2 transition-all"
+                onClick={handleMarkAllAsRead}
+                disabled={markAllAsReadMutation.isPending}
+                className="px-4 py-2 rounded-xl flex items-center gap-2 transition-all disabled:opacity-50"
                 style={{ 
                   backgroundColor: 'var(--color-background)',
                   color: 'var(--color-text-muted)'
@@ -267,7 +190,11 @@ export function NotificationsScreen({ onBack, onNotificationClick }: Notificatio
 
       {/* Notifications List */}
       <div className="flex-1 overflow-y-auto">
-        {filteredNotifications.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <div style={{ color: 'var(--color-text)' }}>Loading notifications...</div>
+          </div>
+        ) : filteredNotifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full px-6 py-12">
             <div 
               className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
@@ -301,8 +228,7 @@ export function NotificationsScreen({ onBack, onNotificationClick }: Notificatio
                   >
                     <motion.button
                       onClick={() => {
-                        markAsRead(notification.id);
-                        onNotificationClick?.(notification.id);
+                        handleMarkAsRead(notification.id);
                       }}
                       className="w-full p-4 rounded-2xl text-left transition-all border relative overflow-hidden"
                       style={{
@@ -379,9 +305,10 @@ export function NotificationsScreen({ onBack, onNotificationClick }: Notificatio
                       whileHover={{ opacity: 1, x: 0 }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        deleteNotification(notification.id);
+                        handleDeleteNotification(notification.id);
                       }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#EF4444] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      disabled={deleteNotificationMutation.isPending}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#EF4444] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
                       whileTap={{ scale: 0.9 }}
                     >
                       <X className="w-4 h-4 text-white" />

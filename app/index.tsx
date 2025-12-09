@@ -21,7 +21,7 @@ export default function Index() {
         else {
           // Give it a moment to load
           const timer = setTimeout(() => {
-            router.replace('/(tabs)');
+        router.replace('/(tabs)');
           }, 500);
           return () => clearTimeout(timer);
         }

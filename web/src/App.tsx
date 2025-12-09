@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ThemeProvider } from './context/ThemeContext';
 import { QueryProvider } from './providers/QueryProvider';
 import { AuthProvider, useAuth } from './providers/AuthProvider';
 import { BottomNav } from './components/BottomNav';
@@ -26,7 +25,7 @@ import { LanguagePreferencesScreen } from './screens/LanguagePreferencesScreen';
 import { PrivacySafetyScreen } from './screens/PrivacySafetyScreen';
 import { HelpSupportScreen } from './screens/HelpSupportScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
-import { mockConversations } from './data/mockData';
+import { useConversations } from './hooks/useMessages';
 import { Sidebar } from './components/Sidebar';
 import ScreenshotGallery from './ScreenshotGallery';
 
@@ -73,8 +72,11 @@ function AppContent() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [screenHistory, setScreenHistory] = useState<Screen[]>(['landing']);
 
+  // Get conversations from backend
+  const { data: conversations = [] } = useConversations();
+  
   // Calculate unread messages count
-  const unreadCount = mockConversations.reduce((sum, conv) => sum + conv.unreadCount, 0);
+  const unreadCount = conversations.reduce((sum: number, conv: any) => sum + (conv.unread_count || 0), 0);
 
   // Navigate to a screen
   const navigateTo = (screen: Screen) => {
@@ -158,10 +160,10 @@ function AppContent() {
   // Auto-navigate based on auth state
   useEffect(() => {
     if (!authLoading) {
-      if (user && (currentScreen === 'login' || currentScreen === 'signup' || currentScreen === 'splash')) {
+      if (user && (currentScreen === 'login' || currentScreen === 'signup' || currentScreen === 'splash' || currentScreen === 'landing')) {
         setCurrentScreen('discover');
       } else if (!user && currentScreen !== 'landing' && currentScreen !== 'login' && currentScreen !== 'signup' && currentScreen !== 'splash') {
-        setCurrentScreen('login');
+        setCurrentScreen('landing');
       }
     }
   }, [user, authLoading, currentScreen]);
@@ -169,56 +171,49 @@ function AppContent() {
   // Show splash screen
   if (showSplash || currentScreen === 'splash') {
     return (
-      <ThemeProvider>
-        <SplashScreen 
+      <SplashScreen 
           onComplete={() => {
             setShowSplash(false);
             if (user) {
               setCurrentScreen('discover');
             } else {
-              setCurrentScreen('login');
+              // Show landing page first for non-authenticated users
+              setCurrentScreen('landing');
             }
           }}
           onNavigateToLogin={() => setCurrentScreen('login')}
           onNavigateToHome={() => setCurrentScreen('discover')}
         />
-      </ThemeProvider>
     );
   }
 
   // Show landing page
   if (currentScreen === 'landing') {
     return (
-      <ThemeProvider>
-        <LandingPage
+      <LandingPage
           onGetStarted={() => setCurrentScreen('signup')}
           onLogin={() => setCurrentScreen('login')}
         />
-      </ThemeProvider>
     );
   }
 
   // Show signup flow
   if (!user && currentScreen === 'signup') {
     return (
-      <ThemeProvider>
-        <SignupFlow
+      <SignupFlow
           onComplete={handleSignupComplete}
           onBackToLogin={handleBackToLogin}
         />
-      </ThemeProvider>
     );
   }
 
   // Show login screen if not authenticated
   if (!user && currentScreen === 'login') {
     return (
-      <ThemeProvider>
-        <LoginScreen
+      <LoginScreen
           onLogin={handleLogin}
           onSignup={handleSignup}
         />
-      </ThemeProvider>
     );
   }
 
@@ -233,10 +228,9 @@ function AppContent() {
   };
 
   return (
-    <ThemeProvider>
-      <div className="relative w-full h-screen overflow-hidden" style={{ backgroundColor: 'var(--color-background)' }}>
-        {/* Desktop Layout - Sidebar + Content */}
-        <div className="flex h-full">
+    <div className="relative w-full h-screen overflow-hidden" style={{ backgroundColor: 'var(--color-background)' }}>
+      {/* Desktop Layout - Sidebar + Content */}
+      <div className="flex h-full">
           {/* Sidebar - Desktop Only */}
           {currentScreen !== 'landing' && currentScreen !== 'signup' && currentScreen !== 'login' && (
             <Sidebar 
@@ -251,11 +245,9 @@ function AppContent() {
           )}
 
           {/* Main Content Area */}
-          <div className="flex-1 h-full relative">
-            {/* Mobile Container - Only on small screens */}
-            <div className="max-w-lg lg:max-w-none mx-auto h-full relative shadow-2xl lg:shadow-none" style={{ backgroundColor: 'var(--color-background)' }}>
-              {/* Screen Content */}
-              <div className="h-full">
+          <div className="flex-1 h-full relative overflow-auto" style={{ backgroundColor: 'var(--color-background)' }}>
+            {/* Screen Content - Full Width */}
+            <div className="h-full w-full">
                 {currentScreen === 'home' && (
                   <div className="h-full">
                     <HomeScreenDesktop 
@@ -368,27 +360,25 @@ function AppContent() {
                     onBack={navigateBack}
                   />
                 )}
-              </div>
-
-              {/* Bottom Navigation */}
-              {showBottomNav && (
-                <BottomNav
-                  currentTab={currentScreen}
-                  onTabChange={handleTabChange}
-                  unreadMessages={unreadCount}
-                />
-              )}
             </div>
 
-            {/* Background decoration */}
-            <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-              <div className="absolute top-0 right-0 w-96 h-96 bg-[#E91E8C]/5 rounded-full blur-3xl" />
-              <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#5FB3B3]/5 rounded-full blur-3xl" />
-            </div>
+            {/* Bottom Navigation */}
+            {showBottomNav && (
+              <BottomNav
+                currentTab={currentScreen}
+                onTabChange={handleTabChange}
+                unreadMessages={unreadCount}
+              />
+            )}
           </div>
         </div>
+
+      {/* Background decoration */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-[#E91E8C]/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#5FB3B3]/5 rounded-full blur-3xl" />
       </div>
-    </ThemeProvider>
+    </div>
   );
 }
 

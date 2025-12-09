@@ -20,6 +20,15 @@ export default defineConfig(({ mode }) => {
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
       alias: {
+        // Expo module stubs for web compatibility
+        'expo-notifications': path.resolve(srcDir, './lib/stubs/expo-notifications.js'),
+        'expo-constants': path.resolve(srcDir, './lib/stubs/expo-constants.js'),
+        'expo-device': path.resolve(srcDir, './lib/stubs/expo-device.js'),
+        'expo-modules-core': path.resolve(srcDir, './lib/stubs/expo-modules-core.js'),
+        'expo-location': path.resolve(srcDir, './lib/stubs/expo-location.js'),
+        'expo-file-system': path.resolve(srcDir, './lib/stubs/expo-file-system.js'),
+        'expo-file-system/legacy': path.resolve(srcDir, './lib/stubs/expo-file-system.js'),
+        'react-native': path.resolve(srcDir, './lib/stubs/react-native.js'),
         // Path aliases - more specific first
         '@/services': servicesDir,
         '@/lib': path.resolve(srcDir, './lib'),
@@ -99,6 +108,8 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       // Vite automatically exposes VITE_* variables via import.meta.env
+      // Define __DEV__ for React Native compatibility
+      __DEV__: JSON.stringify(mode === 'development'),
     },
   };
 });

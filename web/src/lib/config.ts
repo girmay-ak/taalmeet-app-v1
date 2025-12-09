@@ -30,6 +30,7 @@ export const EVENTBRITE_PUBLIC_TOKEN = process.env.NEXT_PUBLIC_EVENTBRITE_PUBLIC
 export const ENABLE_ANALYTICS = process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === 'true';
 export const ENABLE_CRASH_REPORTING = process.env.NEXT_PUBLIC_ENABLE_CRASH_REPORTING === 'true';
 export const ENABLE_MOCK_DATA = process.env.NEXT_PUBLIC_ENABLE_MOCK_DATA === 'true';
+export const ENABLE_LOGGING = process.env.NEXT_PUBLIC_ENABLE_LOGGING === 'true' || process.env.NODE_ENV === 'development';
 
 // ==========================================
 // ERROR TRACKING & ANALYTICS

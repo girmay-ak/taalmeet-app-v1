@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   MapPin, 
   SlidersHorizontal, 
@@ -23,7 +23,12 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { mockPartners } from '../data/mockData';
+import { useAuth } from '../providers/AuthProvider';
+import { useNearbyUsers, useUpdateUserLocation, useUserLocation } from '../hooks/useLocation';
+import { GoogleMap, LoadScript, Marker as GoogleMarker } from '@react-google-maps/api';
+import { GOOGLE_MAPS_API_KEY, MAPBOX_ACCESS_TOKEN } from '@/lib/config';
+import { Map, Marker, NavigationControl, GeolocateControl, FullscreenControl } from 'react-map-gl/mapbox';
+import 'mapbox-gl/dist/mapbox-gl.css';
 
 interface EnhancedMapScreenProps {
   onPartnerClick: (partnerId: string) => void;
@@ -42,6 +47,7 @@ type MapStyle = 'standard' | 'heat' | 'cluster';
 type ViewMode = 'markers' | 'list';
 
 export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenProps) {
+  const { user } = useAuth();
   const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showLayerMenu, setShowLayerMenu] = useState(false);
@@ -56,24 +62,63 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
     minMatchScore: 0,
     meetingType: 'all'
   });
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [mapCenter, setMapCenter] = useState({ lat: 52.0705, lng: 4.3007 }); // Den Haag default
+  const [mapZoom, setMapZoom] = useState(13);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>({ lat: 52.0705, lng: 4.3007 }); // Default to Den Haag
 
+  // Get current user location from database
+  const { data: dbUserLocation } = useUserLocation(user?.id);
+  
+  // Mutation for updating user location
+  const updateLocationMutation = useUpdateUserLocation();
+
+  // Fetch nearby users from database (same as mobile app)
+  const { data: nearbyUsersData, isLoading, refetch } = useNearbyUsers({
+    maxDistance: filters.maxDistance,
+    languages: filters.languages.length > 0 ? filters.languages : undefined,
+    availability: filters.availability === 'now' ? 'available' : filters.availability === 'week' ? 'this_week' : undefined,
+  });
+
+  // Get all partners from nearby users
+  const allPartners = nearbyUsersData || [];
+  
   // Available languages from partners
-  const availableLanguages = Array.from(new Set(mockPartners.map(p => p.teaching.language)));
+  const availableLanguages = Array.from(new Set(
+    allPartners.flatMap((p: any) => 
+      p.languages?.map((l: any) => l.language).filter(Boolean) || []
+    )
+  ));
 
-  // Apply filters
-  const filteredPartners = mockPartners.filter(partner => {
-    if (partner.distance > filters.maxDistance) return false;
-    if (filters.languages.length > 0 && !filters.languages.includes(partner.teaching.language)) return false;
-    if (filters.availability === 'now' && !partner.availableNow) return false;
-    if (filters.minMatchScore > 0 && partner.matchScore < filters.minMatchScore) return false;
-    if (filters.meetingType === 'in-person' && !partner.availability.preferences.includes('in-person')) return false;
-    if (filters.meetingType === 'virtual' && !partner.availability.preferences.includes('video')) return false;
-    if (searchQuery && !partner.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+  // Apply filters to partners
+  const filteredPartners = allPartners.filter((partner: any) => {
+    const distance = partner.distance_km || partner.distance || 999;
+    if (distance > filters.maxDistance) return false;
+    
+    const partnerLanguages = partner.languages?.map((l: any) => l.language) || [];
+    if (filters.languages.length > 0 && !filters.languages.some(lang => partnerLanguages.includes(lang))) return false;
+    
+    if (filters.availability === 'now' && !(partner.is_online || partner.availability_status === 'available')) return false;
+    
+    const matchScore = partner.matchScore || partner.match_score || 0;
+    if (filters.minMatchScore > 0 && matchScore < filters.minMatchScore) return false;
+    
+    if (searchQuery && !(partner.display_name || partner.name || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    
     return true;
   });
 
-  const nearbyPartners = filteredPartners.filter(p => p.distance < (50 * zoomLevel / 100));
-  const selected = selectedPartner ? mockPartners.find(p => p.id === selectedPartner) : null;
+  // Filter partners within 5km radius (same as "Partners Near You" section)
+  const [radius, setRadius] = useState(5); // Default 5km radius
+  
+  const nearbyPartners = filteredPartners.filter((p: any) => {
+    const distance = p.distance_km || p.distance || 999;
+    // Use radius filter instead of zoom-based filter
+    return distance <= radius;
+  });
+  
+  const selected = selectedPartner ? filteredPartners.find((p: any) => p.id === selectedPartner) : null;
   
   // Get current partner index for swipe navigation
   const currentPartnerIndex = selectedPartner ? nearbyPartners.findIndex(p => p.id === selectedPartner) : -1;
@@ -106,16 +151,216 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
     }));
   };
 
-  // Stats
+  // Stats - matching "Partners Near You" logic
+  const onlineNearby = nearbyPartners.filter((p: any) => 
+    (p.is_online || p.availability_status === 'available')
+  );
+  
   const stats = {
     total: nearbyPartners.length,
-    online: nearbyPartners.filter(p => p.isOnline).length,
-    availableNow: nearbyPartners.filter(p => p.availableNow).length,
-    highMatch: nearbyPartners.filter(p => p.matchScore >= 80).length
+    online: onlineNearby.length,
+    availableNow: onlineNearby.length,
+    highMatch: nearbyPartners.filter((p: any) => (p.matchScore || p.match_score || 0) >= 80).length
   };
 
   // Cluster partners by proximity for cluster view
   const clusters = mapStyle === 'cluster' ? generateClusters(nearbyPartners) : [];
+
+  // Get user's current location and update in database
+  useEffect(() => {
+    // First, try to get location from database
+    if (dbUserLocation) {
+      const location = {
+        lat: dbUserLocation.latitude,
+        lng: dbUserLocation.longitude,
+      };
+      setUserLocation(location);
+      setMapCenter(location);
+    }
+
+    // Then get current GPS location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          };
+          setUserLocation(location);
+          setMapCenter(location);
+          
+          // Update location in database (same as mobile app)
+          updateLocationMutation.mutate({
+            lat: location.lat,
+            lng: location.lng,
+          });
+        },
+        (error) => {
+          console.warn('Error getting user location:', error);
+        }
+      );
+
+      // Update location every 20 seconds (same as mobile app)
+      const locationInterval = setInterval(() => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const location = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+            };
+            setUserLocation(location);
+            
+            // Update in database
+            updateLocationMutation.mutate({
+              lat: location.lat,
+              lng: location.lng,
+            });
+          },
+          (error) => {
+            console.warn('Error updating location:', error);
+          }
+        );
+      }, 20000); // Every 20 seconds
+
+      return () => clearInterval(locationInterval);
+    }
+  }, [dbUserLocation]);
+
+  // Convert partners to map format - EXACT same as DiscoverScreenDesktop
+  const mapPartners = nearbyPartners.map((partner: any, index: number) => {
+    // Get coordinates - match DiscoverScreenDesktop format
+    // Use partner.lat/lng (from database) with fallback to generate nearby points
+    const baseLat = userLocation?.lat || mapCenter.lat;
+    const baseLng = userLocation?.lng || mapCenter.lng;
+    
+    const lat = partner.lat || (baseLat + (Math.random() - 0.5) * 0.05);
+    const lng = partner.lng || (baseLng + (Math.random() - 0.5) * 0.05);
+    
+    // Validate coordinates before using
+    const validLat = (typeof lat === 'number' && !isNaN(lat)) ? lat : baseLat;
+    const validLng = (typeof lng === 'number' && !isNaN(lng)) ? lng : baseLng;
+    
+    const teachingLang = partner.languages?.find((l: any) => l.role === 'teaching');
+    const learningLang = partner.languages?.find((l: any) => l.role === 'learning');
+    
+    return {
+      id: partner.id,
+      name: partner.display_name || partner.name || 'User',
+      avatar: partner.avatar_url || partner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(partner.display_name || partner.name || 'User')}&background=1DB954&color=fff`,
+      latitude: validLat,
+      longitude: validLng,
+      isOnline: partner.is_online || partner.availability_status === 'available',
+      distance: partner.distance_km || partner.distance || 0,
+      matchScore: partner.matchScore || partner.match_score || 0,
+      languages: [
+        teachingLang?.language,
+        learningLang?.language
+      ].filter(Boolean),
+    };
+  }).filter(p => !isNaN(p.latitude) && !isNaN(p.longitude)); // Filter out invalid coordinates
+
+  // Use real partners from database (same as mobile app)
+  const displayPartners = mapPartners;
+
+  // Debug: Log map data from database
+  useEffect(() => {
+    console.log('🗺️ Map Debug (Real Data):', {
+      totalPartners: mapPartners.length,
+      nearbyInRadius: nearbyPartners.length,
+      filteredCount: filteredPartners.length,
+      allPartnersFromDB: allPartners.length,
+      radius: `${radius}km`,
+      mapCenter,
+      userLocation,
+      dbUserLocation,
+      filters: {
+        languages: filters.languages,
+        maxDistance: filters.maxDistance,
+        availability: filters.availability
+      },
+      samplePartner: allPartners[0] ? {
+        id: allPartners[0].id,
+        name: allPartners[0].display_name,
+        lat: allPartners[0].lat,
+        lng: allPartners[0].lng,
+        hasValidCoords: !isNaN(allPartners[0].lat) && !isNaN(allPartners[0].lng)
+      } : null
+    });
+  }, [mapPartners.length, radius, allPartners.length]);
+
+  // Log when nearby users data changes
+  useEffect(() => {
+    if (nearbyUsersData) {
+      console.log('📍 Nearby Users from Database:', {
+        count: nearbyUsersData.length,
+        users: nearbyUsersData.slice(0, 3).map((u: any) => ({
+          name: u.display_name || u.name,
+          lat: u.lat,
+          lng: u.lng,
+          distance: u.distance_km || u.distance
+        }))
+      });
+    }
+  }, [nearbyUsersData]);
+
+  // Handle map load
+  const onMapLoad = useCallback((mapInstance: google.maps.Map) => {
+    setMap(mapInstance);
+    setIsMapLoaded(true);
+  }, []);
+
+  // Handle zoom change
+  const handleZoomChange = useCallback(() => {
+    if (map) {
+      const newZoom = map.getZoom() || 13;
+      setMapZoom(newZoom);
+      setZoomLevel(Math.min(100, (newZoom / 20) * 100));
+    }
+  }, [map]);
+
+  // Handle center change
+  const handleCenterChange = useCallback(() => {
+    if (map) {
+      const center = map.getCenter();
+      if (center) {
+        setMapCenter({ lat: center.lat(), lng: center.lng() });
+      }
+    }
+  }, [map]);
+
+  // Center on user location
+  const handleCenterOnUser = useCallback(() => {
+    if (userLocation && map) {
+      map.setCenter(userLocation);
+      map.setZoom(15);
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          };
+          setUserLocation(location);
+          if (map) {
+            map.setCenter(location);
+            map.setZoom(15);
+          }
+        },
+        (error) => {
+          console.warn('Error getting user location:', error);
+        }
+      );
+    }
+  }, [userLocation, map]);
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-full bg-[#0F0F0F] relative overflow-hidden items-center justify-center">
+        <div className="text-white">Loading map data...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-[#0F0F0F] relative overflow-hidden">
@@ -139,136 +384,408 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
         />
       </div>
 
-      {/* Header */}
-      <div className="relative z-10 safe-top">
-        <div className="px-4 pt-3 pb-4">
-          {/* Top row - Back button, Location, Layer selector */}
-          <div className="flex items-center justify-between mb-3">
+      {/* Compact Modern Header - Glass Style */}
+      <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none">
+        <div className="px-3 pt-2.5 pb-2 pointer-events-auto">
+          {/* Single compact row with all controls */}
+          <div className="flex items-center gap-2 mb-2">
+            {/* Back button - smaller */}
             <button 
               onClick={onBack}
-              className="p-2.5 bg-white/10 backdrop-blur-md rounded-full border border-white/20 shadow-lg active:scale-95 transition-transform"
+              className="p-1.5 bg-black/50 backdrop-blur-xl rounded-lg border border-white/10 shadow-xl active:scale-95 transition-all"
             >
-              <X className="w-5 h-5 text-white" />
+              <X className="w-4 h-4 text-white" />
             </button>
             
+            {/* Location - compact */}
             <motion.button 
-              className="flex items-center gap-2 px-4 py-2.5 bg-white/10 backdrop-blur-md rounded-full border border-white/20 shadow-lg"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-black/50 backdrop-blur-xl rounded-lg border border-white/10 shadow-xl"
               whileTap={{ scale: 0.95 }}
             >
-              <MapPin className="w-4 h-4 text-[#1ED760]" />
-              <span className="font-medium text-white">Den Haag</span>
-              <ChevronDown className="w-4 h-4 text-white/60" />
+              <MapPin className="w-3.5 h-3.5 text-[#1DB954]" />
+              <span className="text-xs font-medium text-white">Den Haag</span>
             </motion.button>
+            
+            {/* Radius selector - pill buttons */}
+            <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-xl rounded-lg border border-white/10 p-0.5 shadow-xl">
+              {[5, 10, 25, 50].map((km) => (
+                <button
+                  key={km}
+                  onClick={() => setRadius(km)}
+                  className={`px-2 py-1 rounded-md text-[10px] font-semibold transition-all ${
+                    radius === km
+                      ? 'bg-[#1DB954] text-white shadow-md'
+                      : 'text-white/50 hover:text-white/80'
+                  }`}
+                >
+                  {km}km
+                </button>
+              ))}
+            </div>
 
+            {/* Layer toggle - smaller */}
             <button 
               onClick={() => setShowLayerMenu(!showLayerMenu)}
-              className="p-2.5 bg-white/10 backdrop-blur-md rounded-full border border-white/20 shadow-lg active:scale-95 transition-transform relative"
+              className="ml-auto p-1.5 bg-black/50 backdrop-blur-xl rounded-lg border border-white/10 shadow-xl active:scale-95 transition-all relative"
             >
-              <Layers className="w-5 h-5 text-white" />
+              <Layers className="w-4 h-4 text-white" />
               {mapStyle !== 'standard' && (
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-gradient-to-r from-[#1DB954] to-[#1ED760] rounded-full border-2 border-[#0F0F0F]" />
+                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#1DB954] rounded-full border border-black/50" />
               )}
             </button>
           </div>
 
-          {/* Search bar */}
+          {/* Compact stats bar - single glass container */}
           <motion.div 
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -5 }}
             animate={{ opacity: 1, y: 0 }}
-            className="relative mb-3"
+            className="flex items-center gap-3 px-3 py-2 bg-black/50 backdrop-blur-xl rounded-lg border border-white/10 shadow-xl"
           >
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
-            <input
-              type="text"
-              placeholder="Search partners..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-12 py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#1DB954]/50"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-1 bg-white/20 rounded-full"
-              >
-                <X className="w-4 h-4 text-white" />
-              </button>
-            )}
+            {/* Total */}
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+              <span className="text-[10px] text-white/60">Total</span>
+              <span className="text-xs font-bold text-white">{stats.total}</span>
+            </div>
+            
+            <div className="w-px h-3 bg-white/10" />
+            
+            {/* Online */}
+            <div className="flex items-center gap-1.5">
+              <motion.div 
+                className="w-1.5 h-1.5 bg-[#1DB954] rounded-full"
+                animate={{ opacity: [1, 0.5, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              />
+              <span className="text-[10px] text-[#1DB954]">Online</span>
+              <span className="text-xs font-bold text-white">{stats.online}</span>
+            </div>
+            
+            <div className="w-px h-3 bg-white/10" />
+            
+            {/* High Match */}
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full" />
+              <span className="text-[10px] text-yellow-400">High</span>
+              <span className="text-xs font-bold text-white">{stats.highMatch}</span>
+            </div>
+            
+            {/* Count summary */}
+            <div className="ml-auto text-[10px] text-white/60">
+              {mapPartners.length} within {radius}km
+            </div>
           </motion.div>
-
-          {/* Stats row */}
-          <div className="grid grid-cols-4 gap-2">
-            <motion.div 
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="bg-white/10 backdrop-blur-md rounded-xl p-2.5 border border-white/20"
-            >
-              <div className="text-xs text-white/60 mb-0.5">Total</div>
-              <div className="text-lg font-bold text-white">{stats.total}</div>
-            </motion.div>
-            <motion.div 
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="bg-gradient-to-br from-[#1DB954]/20 to-[#1ED760]/20 backdrop-blur-md rounded-xl p-2.5 border border-[#1DB954]/30"
-            >
-              <div className="text-xs text-[#1ED760] mb-0.5">Online</div>
-              <div className="text-lg font-bold text-white">{stats.online}</div>
-            </motion.div>
-            <motion.div 
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="bg-gradient-to-br from-[#5FB3B3]/20 to-[#4FD1C5]/20 backdrop-blur-md rounded-xl p-2.5 border border-[#5FB3B3]/30"
-            >
-              <div className="text-xs text-[#4FD1C5] mb-0.5">Now</div>
-              <div className="text-lg font-bold text-white">{stats.availableNow}</div>
-            </motion.div>
-            <motion.div 
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 backdrop-blur-md rounded-xl p-2.5 border border-yellow-500/30"
-            >
-              <div className="text-xs text-yellow-400 mb-0.5">High</div>
-              <div className="text-lg font-bold text-white">{stats.highMatch}</div>
-            </motion.div>
-          </div>
         </div>
       </div>
 
       {/* Map Area */}
       <div className="flex-1 relative">
-        {/* Map Background with patterns */}
-        <div className="absolute inset-0">
-          {/* Grid pattern */}
-          <div 
-            className="absolute inset-0 opacity-10"
-            style={{
-              backgroundImage: `
-                linear-gradient(rgba(95, 179, 179, 0.3) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(95, 179, 179, 0.3) 1px, transparent 1px)
-              `,
-              backgroundSize: `${50 * (zoomLevel / 50)}px ${50 * (zoomLevel / 50)}px`
+        {/* Mapbox Map */}
+        {MAPBOX_ACCESS_TOKEN ? (
+          <Map
+            mapboxAccessToken={MAPBOX_ACCESS_TOKEN}
+            initialViewState={{
+              longitude: mapCenter.lng,
+              latitude: mapCenter.lat,
+              zoom: mapZoom
             }}
-          />
+            style={{ width: '100%', height: '100%' }}
+            mapStyle="mapbox://styles/mapbox/dark-v11"
+            onMove={(evt) => {
+              setMapCenter({ lat: evt.viewState.latitude, lng: evt.viewState.longitude });
+              setMapZoom(evt.viewState.zoom);
+            }}
+          >
+            {/* Controls */}
+            <NavigationControl position="top-right" style={{ display: 'none' }} />
+            <GeolocateControl
+              position="bottom-right"
+              trackUserLocation={false}
+              showUserHeading={false}
+              onGeolocate={(e) => {
+                setUserLocation({
+                  lat: e.coords.latitude,
+                  lng: e.coords.longitude
+                });
+              }}
+              style={{ display: 'none' }}
+            />
+            <FullscreenControl position="top-right" style={{ display: 'none' }} />
 
-          {/* Heat map overlay */}
-          {mapStyle === 'heat' && (
-            <div className="absolute inset-0">
-              {nearbyPartners.map((partner, idx) => (
+            {/* User location marker with compact radar */}
+            {userLocation && !isNaN(userLocation.lat) && !isNaN(userLocation.lng) && (
+              <Marker
+                longitude={userLocation.lng}
+                latitude={userLocation.lat}
+                anchor="center"
+              >
+                <div className="relative w-32 h-32 flex items-center justify-center">
+                  {/* Subtle scanning rings - smaller */}
+                  {[0, 0.5, 1].map((delay, idx) => (
+                    <motion.div
+                      key={`ring-${idx}`}
+                      className="absolute w-20 h-20 border border-[#1DB954]/60 rounded-full"
+                      animate={{
+                        scale: [1, 2.5],
+                        opacity: [0.5, 0],
+                        borderWidth: ['1px', '0px']
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeOut",
+                        delay: delay
+                      }}
+                    />
+                  ))}
+                  
+                  {/* Subtle rotating radar beam */}
+                  <motion.div
+                    className="absolute w-32 h-32"
+                    animate={{ rotate: 360 }}
+                    transition={{
+                      duration: 3,
+                      repeat: Infinity,
+                      ease: "linear"
+                    }}
+                  >
+                    <div 
+                      className="absolute top-1/2 left-1/2 w-32 h-32 -translate-x-1/2 -translate-y-1/2"
+                      style={{
+                        background: 'conic-gradient(from 0deg, transparent 0deg, rgba(29, 185, 84, 0.25) 20deg, rgba(30, 215, 96, 0.15) 40deg, transparent 60deg)',
+                      }}
+                    />
+                  </motion.div>
+
+                  {/* Modern center marker - glass effect */}
+                  <motion.div
+                    className="absolute w-5 h-5 bg-white/20 backdrop-blur-sm rounded-full border-2 border-[#1DB954] shadow-lg z-10"
+                    animate={{
+                      boxShadow: [
+                        '0 0 10px rgba(29, 185, 84, 0.4)',
+                        '0 0 20px rgba(29, 185, 84, 0.6)',
+                        '0 0 10px rgba(29, 185, 84, 0.4)'
+                      ]
+                    }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
+                  >
+                    <div className="absolute inset-0.5 bg-gradient-to-br from-[#1DB954] to-[#1ED760] rounded-full" />
+                  </motion.div>
+                </div>
+              </Marker>
+            )}
+
+            {/* Partner markers */}
+            {mapStyle !== 'cluster' && displayPartners.map((partner) => (
+              <Marker
+                key={partner.id}
+                longitude={partner.longitude}
+                latitude={partner.latitude}
+                anchor="bottom"
+                onClick={(e) => {
+                  e.originalEvent.stopPropagation();
+                  setSelectedPartner(partner.id);
+                }}
+              >
                 <motion.div
-                  key={partner.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 0.4 }}
-                  className="absolute rounded-full blur-3xl"
-                  style={{
-                    left: `${20 + idx * 15}%`,
-                    top: `${30 + (idx % 3) * 20}%`,
-                    width: '150px',
-                    height: '150px',
-                    background: partner.matchScore > 80 
-                      ? 'radial-gradient(circle, rgba(29, 185, 84, 0.6) 0%, transparent 70%)'
-                      : 'radial-gradient(circle, rgba(95, 179, 179, 0.4) 0%, transparent 70%)'
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  whileHover={{ scale: 1.15, z: 10 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="cursor-pointer"
+                >
+                  <div className="relative flex flex-col items-center">
+                    {/* Subtle pulse for online partners */}
+                    {partner.isOnline && (
+                      <motion.div
+                        className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-12 bg-[#1DB954]/30 rounded-full blur-sm"
+                        animate={{
+                          scale: [1, 1.4, 1],
+                          opacity: [0.4, 0, 0.4]
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          ease: "easeInOut"
+                        }}
+                      />
+                    )}
+                    
+                    {/* Modern glass pin - smaller and transparent */}
+                    <div className={`relative w-12 h-12 rounded-full ${
+                      selectedPartner === partner.id 
+                        ? 'border-2 border-[#1DB954] ring-2 ring-[#1DB954]/30 shadow-xl shadow-[#1DB954]/30' 
+                        : 'border-2 border-white/60 shadow-lg'
+                    } overflow-hidden bg-white/10 backdrop-blur-md`}>
+                      {/* Glass overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
+                      
+                      <img
+                        src={partner.avatar}
+                        alt={partner.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    
+                    {/* Small language badge - transparent */}
+                    <motion.div
+                      whileHover={{ rotate: [0, -10, 10, 0] }}
+                      transition={{ duration: 0.3 }}
+                      className="absolute -top-0.5 -right-0.5 text-sm bg-white/90 backdrop-blur-sm rounded-full w-5 h-5 flex items-center justify-center shadow-md border border-white/40"
+                    >
+                      {partner.languages[0] ? getLanguageFlag(partner.languages[0]) : '🌍'}
+                    </motion.div>
+
+                    {/* Online indicator - smaller */}
+                    {partner.isOnline && (
+                      <motion.div
+                        animate={{
+                          boxShadow: [
+                            '0 0 0 0 rgba(29, 185, 84, 0.6)',
+                            '0 0 0 4px rgba(29, 185, 84, 0)',
+                            '0 0 0 0 rgba(29, 185, 84, 0)'
+                          ]
+                        }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#1DB954] border-2 border-white/80 rounded-full z-10"
+                      />
+                    )}
+
+                    {/* Match score badge - compact */}
+                    {partner.matchScore >= 90 && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -top-1 -left-1 w-5 h-5 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full shadow-md flex items-center justify-center border border-white/40"
+                      >
+                        <Star className="w-2.5 h-2.5 text-white fill-white" />
+                      </motion.div>
+                    )}
+
+                    {/* Distance label - transparent and compact */}
+                    <motion.div 
+                      initial={{ opacity: 0, y: 3 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-1 px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-full shadow-lg border border-white/20"
+                    >
+                      <span className="text-[10px] font-semibold text-white">{partner.distance.toFixed(1)}km</span>
+                    </motion.div>
+                  </div>
+                </motion.div>
+              </Marker>
+            ))}
+          </Map>
+        ) : GOOGLE_MAPS_API_KEY ? (
+          <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY}>
+            <GoogleMap
+              mapContainerStyle={{ width: '100%', height: '100%' }}
+              center={mapCenter}
+              zoom={mapZoom}
+              onLoad={onMapLoad}
+              onZoomChanged={handleZoomChange}
+              onCenterChanged={handleCenterChange}
+              options={{
+                styles: [
+                  {
+                    featureType: 'all',
+                    elementType: 'geometry',
+                    stylers: [{ color: '#1a1a1a' }],
+                  },
+                  {
+                    featureType: 'all',
+                    elementType: 'labels.text.fill',
+                    stylers: [{ color: '#9ca3af' }],
+                  },
+                  {
+                    featureType: 'water',
+                    elementType: 'geometry',
+                    stylers: [{ color: '#0f0f0f' }],
+                  },
+                  {
+                    featureType: 'road',
+                    elementType: 'geometry',
+                    stylers: [{ color: '#2a2a2a' }],
+                  },
+                ],
+                disableDefaultUI: false,
+                zoomControl: false,
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: false,
+              }}
+            >
+              {/* User location marker */}
+              {userLocation && typeof window !== 'undefined' && window.google && (
+                <GoogleMarker
+                  position={userLocation}
+                  icon={{
+                    path: window.google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: '#1DB954',
+                    fillOpacity: 1,
+                    strokeColor: '#fff',
+                    strokeWeight: 2,
                   }}
                 />
+              )}
+
+              {/* Partner markers */}
+              {mapStyle !== 'cluster' && typeof window !== 'undefined' && window.google && mapPartners.map((partner) => (
+                <GoogleMarker
+                  key={partner.id}
+                  position={{ lat: partner.latitude, lng: partner.longitude }}
+                  icon={{
+                    url: partner.avatar,
+                    scaledSize: new window.google.maps.Size(48, 48),
+                    anchor: new window.google.maps.Point(24, 48),
+                  }}
+                  onClick={() => setSelectedPartner(partner.id)}
+                />
               ))}
+            </GoogleMap>
+          </LoadScript>
+        ) : (
+          /* Fallback to mock map if no API key */
+          <div className="absolute inset-0">
+            {/* Grid pattern */}
+            <div 
+              className="absolute inset-0 opacity-10"
+              style={{
+                backgroundImage: `
+                  linear-gradient(rgba(95, 179, 179, 0.3) 1px, transparent 1px),
+                  linear-gradient(90deg, rgba(95, 179, 179, 0.3) 1px, transparent 1px)
+                `,
+                backgroundSize: `${50 * (zoomLevel / 50)}px ${50 * (zoomLevel / 50)}px`
+              }}
+            />
+
+            {/* Heat map overlay */}
+            {mapStyle === 'heat' && (
+            <div className="absolute inset-0">
+              {nearbyPartners.map((partner: any, idx: number) => {
+                const matchScore = partner.matchScore || partner.match_score || 0;
+                return (
+                  <motion.div
+                    key={partner.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 0.4 }}
+                    className="absolute rounded-full blur-3xl"
+                    style={{
+                      left: `${20 + idx * 15}%`,
+                      top: `${30 + (idx % 3) * 20}%`,
+                      width: '150px',
+                      height: '150px',
+                      background: matchScore > 80 
+                        ? 'radial-gradient(circle, rgba(29, 185, 84, 0.6) 0%, transparent 70%)'
+                        : 'radial-gradient(circle, rgba(95, 179, 179, 0.4) 0%, transparent 70%)'
+                    }}
+                  />
+                );
+              })}
             </div>
           )}
 
@@ -323,7 +840,7 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
                 ))
               ) : (
                 // Standard marker view
-                nearbyPartners.map((partner, index) => (
+                nearbyPartners.map((partner: any, index: number) => (
                   <motion.div
                     key={partner.id}
                     initial={{ opacity: 0, scale: 0 }}
@@ -343,64 +860,88 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
             </>
           )}
 
-          {/* Current location with advanced radar */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div className="relative">
-              {/* Multiple scanning rings */}
-              {[0, 0.4, 0.8, 1.2].map((delay, idx) => (
+            {/* Current location with advanced radar (only for fallback) */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+              <div className="relative">
+                {/* Multiple scanning rings */}
+                {[0, 0.4, 0.8, 1.2].map((delay, idx) => (
+                  <motion.div
+                    key={idx}
+                    className="absolute w-40 h-40 border-2 border-[#1DB954] rounded-full -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2"
+                    animate={{
+                      scale: [1, 3],
+                      opacity: [0.6, 0],
+                      borderWidth: ['2px', '0px']
+                    }}
+                    transition={{
+                      duration: 2.5,
+                      repeat: Infinity,
+                      ease: "easeOut",
+                      delay: delay
+                    }}
+                  />
+                ))}
+                
+                {/* Rotating radar beam with gradient */}
                 <motion.div
-                  key={idx}
-                  className="absolute w-40 h-40 border-2 border-[#1DB954] rounded-full -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2"
+                  className="absolute w-48 h-48 -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2"
+                  animate={{ rotate: 360 }}
+                  transition={{
+                    duration: 4,
+                    repeat: Infinity,
+                    ease: "linear"
+                  }}
+                >
+                  <div 
+                    className="absolute top-1/2 left-1/2 w-48 h-48 -translate-x-1/2 -translate-y-1/2"
+                    style={{
+                      background: 'conic-gradient(from 0deg, transparent 0deg, rgba(29, 185, 84, 0.4) 20deg, rgba(30, 215, 96, 0.2) 40deg, transparent 60deg)',
+                    }}
+                  />
+                </motion.div>
+
+                {/* Center glow */}
+                <motion.div
+                  className="absolute w-6 h-6 bg-gradient-to-r from-[#1DB954] to-[#1ED760] rounded-full -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2 shadow-lg shadow-[#1DB954]/50"
                   animate={{
-                    scale: [1, 3],
-                    opacity: [0.6, 0],
-                    borderWidth: ['2px', '0px']
+                    boxShadow: [
+                      '0 0 20px rgba(29, 185, 84, 0.5)',
+                      '0 0 40px rgba(29, 185, 84, 0.8)',
+                      '0 0 20px rgba(29, 185, 84, 0.5)'
+                    ]
                   }}
                   transition={{
-                    duration: 2.5,
+                    duration: 2,
                     repeat: Infinity,
-                    ease: "easeOut",
-                    delay: delay
+                    ease: "easeInOut"
                   }}
                 />
-              ))}
-              
-              {/* Rotating radar beam with gradient */}
-              <motion.div
-                className="absolute w-48 h-48 -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2"
-                animate={{ rotate: 360 }}
-                transition={{
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: "linear"
-                }}
-              >
-                <div 
-                  className="absolute top-1/2 left-1/2 w-48 h-48 -translate-x-1/2 -translate-y-1/2"
-                  style={{
-                    background: 'conic-gradient(from 0deg, transparent 0deg, rgba(29, 185, 84, 0.4) 20deg, rgba(30, 215, 96, 0.2) 40deg, transparent 60deg)',
-                  }}
-                />
-              </motion.div>
-
-              {/* Center glow */}
-              <motion.div
-                className="absolute w-6 h-6 bg-gradient-to-r from-[#1DB954] to-[#1ED760] rounded-full -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2 shadow-lg shadow-[#1DB954]/50"
-                animate={{
-                  boxShadow: [
-                    '0 0 20px rgba(29, 185, 84, 0.5)',
-                    '0 0 40px rgba(29, 185, 84, 0.8)',
-                    '0 0 20px rgba(29, 185, 84, 0.5)'
-                  ]
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-              />
+              </div>
             </div>
           </div>
+        )}
+
+        {/* Partner count indicator - Real database data */}
+        <div className="absolute top-24 left-4 z-20">
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="bg-[#1DB954]/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-white/20"
+          >
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-white" />
+              <span className="text-white font-bold text-sm">
+                {displayPartners.length} nearby
+              </span>
+              {isLoading && (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                  className="w-3 h-3 border-2 border-white border-t-transparent rounded-full"
+                />
+              )}
+            </div>
+          </motion.div>
         </div>
 
         {/* Floating action buttons */}
@@ -442,7 +983,9 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
           <div className="flex flex-col gap-1 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1">
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => setZoomLevel(Math.min(100, zoomLevel + 10))}
+              onClick={() => {
+                setMapZoom(Math.min(20, mapZoom + 1));
+              }}
               className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center"
             >
               <Plus className="w-5 h-5 text-white" />
@@ -450,7 +993,9 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
             <div className="w-10 h-px bg-white/20" />
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => setZoomLevel(Math.max(20, zoomLevel - 10))}
+              onClick={() => {
+                setMapZoom(Math.max(1, mapZoom - 1));
+              }}
               className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center"
             >
               <Minus className="w-5 h-5 text-white" />
@@ -460,6 +1005,7 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
           {/* Re-center */}
           <motion.button
             whileTap={{ scale: 0.9 }}
+            onClick={handleCenterOnUser}
             className="w-12 h-12 bg-gradient-to-r from-[#1DB954] to-[#1ED760] rounded-full shadow-lg shadow-[#1DB954]/30 flex items-center justify-center"
           >
             <Locate className="w-5 h-5 text-white" />
@@ -530,11 +1076,11 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
                 <div className="flex gap-3">
                   <div className="relative flex-shrink-0">
                     <img
-                      src={selected.avatar}
-                      alt={selected.name}
+                      src={selected.avatar_url || selected.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selected.display_name || selected.name || 'User')}&background=1DB954&color=fff`}
+                      alt={selected.display_name || selected.name || 'User'}
                       className="w-20 h-20 rounded-2xl object-cover"
                     />
-                    {selected.isOnline && (
+                    {(selected.is_online || selected.availability_status === 'available') && (
                       <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-gradient-to-r from-[#1DB954] to-[#1ED760] border-3 border-[#0F0F0F] rounded-full flex items-center justify-center">
                         <div className="w-2 h-2 bg-white rounded-full" />
                       </div>
@@ -545,16 +1091,18 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <h3 className="font-bold text-white text-lg">
-                          {selected.name}, {selected.age}
+                          {selected.display_name || selected.name || 'User'}, {selected.age || ''}
                         </h3>
                         <div className="flex items-center gap-2 text-sm text-white/60">
                           <MapPin className="w-3.5 h-3.5" />
-                          <span>{selected.distance}km away</span>
+                          <span>{(selected.distance_km || selected.distance || 0).toFixed(1)}km away</span>
                           <span>•</span>
-                          <span className="text-[#1ED760] font-semibold">{selected.matchScore}% match</span>
+                          <span className="text-[#1ED760] font-semibold">{selected.matchScore || selected.match_score || 0}% match</span>
                         </div>
                       </div>
-                      <div className="text-2xl">{selected.teaching.flag}</div>
+                      <div className="text-2xl">
+                        {selected.languages?.find((l: any) => l.role === 'teaching')?.flag || '🌍'}
+                      </div>
                     </div>
 
                     <div className="flex gap-2">
@@ -625,24 +1173,24 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
                   >
                     <div className="relative">
                       <img
-                        src={partner.avatar}
-                        alt={partner.name}
+                        src={partner.avatar_url || partner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(partner.display_name || partner.name || 'User')}&background=1DB954&color=fff`}
+                        alt={partner.display_name || partner.name || 'User'}
                         className="w-14 h-14 rounded-xl object-cover"
                       />
-                      {partner.isOnline && (
+                      {(partner.is_online || partner.availability_status === 'available') && (
                         <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-gradient-to-r from-[#1DB954] to-[#1ED760] border-2 border-[#0F0F0F] rounded-full" />
                       )}
                     </div>
 
                     <div className="flex-1 min-w-0">
                       <h4 className="font-semibold text-white truncate">
-                        {partner.name}, {partner.age}
+                        {partner.display_name || partner.name || 'User'}, {partner.age || ''}
                       </h4>
                       <div className="flex items-center gap-2 text-xs text-white/60">
-                        <span>{partner.distance}km</span>
+                        <span>{(partner.distance_km || partner.distance || 0).toFixed(1)}km</span>
                         <span>•</span>
-                        <span className="text-[#1ED760]">{partner.matchScore}%</span>
-                        {partner.availableNow && (
+                        <span className="text-[#1ED760]">{partner.matchScore || partner.match_score || 0}%</span>
+                        {(partner.is_online || partner.availability_status === 'available') && (
                           <>
                             <span>•</span>
                             <span className="flex items-center gap-1 text-[#4FD1C5]">
@@ -655,8 +1203,10 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
                     </div>
 
                     <div className="flex flex-col items-end gap-1">
-                      <div className="text-xl">{partner.teaching.flag}</div>
-                      {partner.matchScore >= 80 && (
+                      <div className="text-xl">
+                        {partner.languages?.find((l: any) => l.role === 'teaching')?.flag || '🌍'}
+                      </div>
+                      {(partner.matchScore || partner.match_score || 0) >= 80 && (
                         <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
                       )}
                     </div>
@@ -924,10 +1474,16 @@ export function EnhancedMapScreen({ onPartnerClick, onBack }: EnhancedMapScreenP
 
 // Helper function to render a marker
 function renderMarker(partner: any, isSelected: boolean) {
+  const isOnline = partner.is_online || partner.availability_status === 'available';
+  const avatar = partner.avatar_url || partner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(partner.display_name || partner.name || 'User')}&background=1DB954&color=fff`;
+  const name = partner.display_name || partner.name || 'User';
+  const distance = partner.distance_km || partner.distance || 0;
+  const flag = partner.languages?.find((l: any) => l.role === 'teaching')?.flag || '🌍';
+  
   return (
     <div className="relative flex flex-col items-center">
       {/* Pulse effect for available partners */}
-      {partner.availableNow && (
+      {isOnline && (
         <motion.div
           className="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-16 bg-[#4FD1C5] rounded-full"
           animate={{
@@ -955,8 +1511,8 @@ function renderMarker(partner: any, isSelected: boolean) {
             : 'border-white shadow-xl'
         } overflow-hidden bg-white`}>
           <img
-            src={partner.avatar}
-            alt={partner.name}
+            src={avatar}
+            alt={name}
             className="w-full h-full object-cover"
           />
         </div>
@@ -974,11 +1530,11 @@ function renderMarker(partner: any, isSelected: boolean) {
           transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
           className="absolute -top-1 -right-1 text-lg bg-white rounded-full w-7 h-7 flex items-center justify-center shadow-lg border-3 border-[#0F0F0F]"
         >
-          {partner.teaching.flag}
+          {flag}
         </motion.div>
 
         {/* Online indicator */}
-        {partner.isOnline && (
+        {isOnline && (
           <motion.div
             animate={{
               boxShadow: [
@@ -993,7 +1549,7 @@ function renderMarker(partner: any, isSelected: boolean) {
         )}
 
         {/* Match score badge */}
-        {partner.matchScore >= 90 && (
+        {(partner.matchScore || partner.match_score || 0) >= 90 && (
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
@@ -1010,7 +1566,7 @@ function renderMarker(partner: any, isSelected: boolean) {
         animate={{ opacity: 1, y: 0 }}
         className="mt-1.5 px-2.5 py-1 bg-white backdrop-blur-sm rounded-full shadow-md"
       >
-        <span className="text-xs font-bold text-[#0F0F0F]">{partner.distance}km</span>
+        <span className="text-xs font-bold text-[#0F0F0F]">{distance.toFixed(1)}km</span>
       </motion.div>
     </div>
   );
@@ -1056,4 +1612,24 @@ function generateClusters(partners: any[]) {
   });
 
   return clusters;
+}
+
+// Helper function to get language flag
+function getLanguageFlag(language: string): string {
+  const flags: { [key: string]: string } = {
+    'English': '🇬🇧',
+    'Spanish': '🇪🇸',
+    'French': '🇫🇷',
+    'German': '🇩🇪',
+    'Italian': '🇮🇹',
+    'Portuguese': '🇵🇹',
+    'Chinese': '🇨🇳',
+    'Japanese': '🇯🇵',
+    'Korean': '🇰🇷',
+    'Russian': '🇷🇺',
+    'Arabic': '🇦🇪',
+    'Hindi': '🇮🇳',
+    'Dutch': '🇳🇱'
+  };
+  return flags[language] || '🌍';
 }

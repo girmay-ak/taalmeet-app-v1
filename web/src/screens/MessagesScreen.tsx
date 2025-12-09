@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Search, Plus } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ConversationCard } from '../components/ConversationCard';
-import { mockConversations } from '../data/mockData';
+import { useConversations } from '../hooks/useMessages';
 
 interface MessagesScreenProps {
   onConversationClick: (conversationId: string) => void;
@@ -12,15 +12,27 @@ export function MessagesScreen({ onConversationClick }: MessagesScreenProps) {
   const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'archived'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Get real conversations data
+  const { data: conversations = [], isLoading } = useConversations();
+
   const tabs = [
-    { id: 'all', label: 'All', count: mockConversations.length },
-    { id: 'unread', label: 'Unread', count: mockConversations.filter(c => c.unreadCount > 0).length },
+    { id: 'all', label: 'All', count: conversations.length },
+    { id: 'unread', label: 'Unread', count: conversations.filter((c: any) => (c.unread_count || 0) > 0).length },
     { id: 'archived', label: 'Archived', count: 0 }
   ];
 
-  const filteredConversations = mockConversations.filter(conv => {
-    if (activeTab === 'unread') return conv.unreadCount > 0;
+  const filteredConversations = conversations.filter((conv: any) => {
+    if (activeTab === 'unread') return (conv.unreadCount || conv.unread_count || 0) > 0;
     if (activeTab === 'archived') return false; // No archived for demo
+    if (searchQuery) {
+      // Support both camelCase (from backend) and snake_case (legacy)
+      const otherUserName = conv.otherUser?.displayName 
+        || conv.otherUser?.name
+        || conv.other_user?.display_name 
+        || conv.other_user?.name 
+        || '';
+      return otherUserName.toLowerCase().includes(searchQuery.toLowerCase());
+    }
     return true;
   });
 

@@ -1,7 +1,9 @@
-import { Settings, Share2, Edit, MapPin, Star, Award, Calendar, CheckCircle } from 'lucide-react';
+import { Settings, Share2, Edit, MapPin, Star, Award, Calendar, CheckCircle, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useState } from 'react';
-import { currentUser as initialUserData } from '../data/mockData';
+import { useState, useMemo } from 'react';
+import { useProfile, useUpdateProfile } from '../hooks/useProfile';
+import { useAuth } from '../providers/AuthProvider';
+import { getLanguageFlag } from '@/utils/languageFlags';
 import { EditProfileModal } from '../components/modals/EditProfileModal';
 import { LanguageEditorModal } from '../components/modals/LanguageEditorModal';
 import { InterestsEditorModal } from '../components/modals/InterestsEditorModal';
@@ -23,21 +25,73 @@ export function ProfileScreen({
   onNavigateToHelp,
   onLogout
 }: ProfileScreenProps) {
-  const [currentUser, setCurrentUser] = useState(initialUserData);
+  const { user, profile } = useAuth();
+  const { data: profileData, isLoading: profileLoading, error: profileError } = useProfile();
+  const updateProfileMutation = useUpdateProfile();
+  
+  // Use profile from AuthProvider or from useProfile hook
+  const currentProfile = profile || profileData;
+
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showLanguageEditor, setShowLanguageEditor] = useState(false);
   const [languageEditType, setLanguageEditType] = useState<'teaching' | 'learning'>('teaching');
   const [showInterestsEditor, setShowInterestsEditor] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [isAvailable, setIsAvailable] = useState(true);
+
+  // Map backend profile data to UI format
+  const currentUser = useMemo(() => {
+    if (!currentProfile) return null;
+
+    const teachingLang = currentProfile.languages?.teaching?.[0];
+    const learningLang = currentProfile.languages?.learning?.[0];
+
+    return {
+      id: currentProfile.id,
+      name: currentProfile.displayName || 'User',
+      age: 0, // Age not stored in backend currently
+      avatar: currentProfile.avatarUrl || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(currentProfile.displayName || 'User') + '&background=1DB954&color=fff',
+      bio: currentProfile.bio || 'No bio yet.',
+      location: [currentProfile.city, currentProfile.country].filter(Boolean).join(', ') || 'Location not set',
+      verified: true, // TODO: Add verification status to backend
+      premium: false, // TODO: Add premium status to backend
+      connectionCount: 0, // TODO: Get from connections hook
+      exchangeCount: 0, // TODO: Get from sessions/exchanges table
+      rating: 4.8, // TODO: Calculate from reviews
+      teaching: teachingLang ? {
+        language: teachingLang.language || 'Not set',
+        level: teachingLang.level || 'Native',
+        flag: getLanguageFlag(teachingLang.language || '')
+      } : { language: 'Not set', level: 'Native', flag: '🌐' },
+      learning: learningLang ? {
+        language: learningLang.language || 'Not set',
+        level: learningLang.level || 'Beginner',
+        flag: getLanguageFlag(learningLang.language || '')
+      } : { language: 'Not set', level: 'Beginner', flag: '🌐' },
+      interests: currentProfile.interests || []
+    };
+  }, [currentProfile]);
+
+  const isAvailable = false; // TODO: Get from availability hook
 
   const handleEditProfile = () => {
     setShowEditProfile(true);
   };
 
-  const handleSaveProfile = (data: any) => {
-    setCurrentUser({ ...currentUser, ...data });
+  const handleSaveProfile = async (data: any) => {
+    if (!user?.id) return;
+    
+    try {
+      await updateProfileMutation.mutateAsync({
+        displayName: data.name,
+        bio: data.bio,
+        city: data.location?.split(',')[0]?.trim(),
+        country: data.location?.split(',')[1]?.trim(),
+      });
+      setShowEditProfile(false);
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+    }
   };
 
   const handleEditLanguage = (type: 'teaching' | 'learning') => {
@@ -45,22 +99,21 @@ export function ProfileScreen({
     setShowLanguageEditor(true);
   };
 
-  const handleSaveLanguage = (data: any) => {
-    if (languageEditType === 'teaching') {
-      setCurrentUser({ ...currentUser, teaching: data });
-    } else {
-      setCurrentUser({ ...currentUser, learning: data });
-    }
+  const handleSaveLanguage = async (data: any) => {
+    // TODO: Implement language update using useUpdateLanguages hook
+    console.log('Save language:', data);
+    setShowLanguageEditor(false);
   };
 
-  const handleSaveInterests = (interests: string[]) => {
-    setCurrentUser({ ...currentUser, interests });
+  const handleSaveInterests = async (interests: string[]) => {
+    // TODO: Implement interests update
+    console.log('Save interests:', interests);
+    setShowInterestsEditor(false);
   };
 
   const handleUpgrade = (planId: string) => {
     console.log('Upgrading to:', planId);
-    // In real app, handle payment
-    setCurrentUser({ ...currentUser, premium: true });
+    // TODO: Implement premium upgrade
   };
 
   const handleShare = async () => {
@@ -68,7 +121,7 @@ export function ProfileScreen({
       try {
         await navigator.share({
           title: 'TaalMeet Profile',
-          text: `Check out ${currentUser.name}'s language exchange profile on TaalMeet!`,
+          text: `Check out ${currentUser?.name}'s language exchange profile on TaalMeet!`,
           url: window.location.href
         });
       } catch (err) {
@@ -87,6 +140,34 @@ export function ProfileScreen({
       onLogout();
     }
   };
+
+  const handleToggleAvailability = async (checked: boolean) => {
+    // TODO: Implement availability toggle
+    console.log('Toggle availability:', checked);
+  };
+
+  if (profileLoading) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center" style={{ backgroundColor: 'var(--color-background)' }}>
+        <Loader2 className="w-8 h-8 animate-spin text-[#1DB954]" />
+        <p className="mt-4 text-[#9CA3AF]">Loading profile...</p>
+      </div>
+    );
+  }
+
+  if (profileError || !currentUser) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center px-4" style={{ backgroundColor: 'var(--color-background)' }}>
+        <p className="text-[#EF4444] mb-4">Failed to load profile</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-gradient-primary text-white rounded-xl"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-y-auto pb-20" style={{ backgroundColor: 'var(--color-background)' }}>
@@ -114,7 +195,10 @@ export function ProfileScreen({
               alt={currentUser.name}
               className="w-28 h-28 rounded-full object-cover border-4 border-[#2A2A2A]"
             />
-            <button className="absolute bottom-0 right-0 w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center border-4 border-[#0F0F0F] active:scale-95 transition-transform">
+            <button 
+              className="absolute bottom-0 right-0 w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center border-4 border-[#0F0F0F] active:scale-95 transition-transform"
+              onClick={handleEditProfile}
+            >
               <Edit className="w-5 h-5 text-white" />
             </button>
           </div>
@@ -122,7 +206,8 @@ export function ProfileScreen({
           {/* Name & Badges */}
           <div className="flex items-center gap-2 mb-1">
             <h2 className="text-2xl font-bold text-white">
-              {currentUser.name}, {currentUser.age}
+              {currentUser.name}
+              {currentUser.age > 0 && `, ${currentUser.age}`}
             </h2>
             {currentUser.verified && (
               <CheckCircle className="w-6 h-6 text-[#5FB3B3]" />
@@ -253,24 +338,26 @@ export function ProfileScreen({
       </div>
 
       {/* Interests Section */}
-      <div className="px-4 mb-6">
-        <div className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A]">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-white">Interests</h3>
-            <button className="text-[#5FB3B3] text-sm" onClick={() => setShowInterestsEditor(true)}>Edit</button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {currentUser.interests.map((interest) => (
-              <span
-                key={interest}
-                className="px-3 py-1.5 bg-[#0F0F0F] border border-[#2A2A2A] rounded-full text-sm text-[#9CA3AF]"
-              >
-                {interest}
-              </span>
-            ))}
+      {currentUser.interests && currentUser.interests.length > 0 && (
+        <div className="px-4 mb-6">
+          <div className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A]">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-white">Interests</h3>
+              <button className="text-[#5FB3B3] text-sm" onClick={() => setShowInterestsEditor(true)}>Edit</button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {currentUser.interests.map((interest, index) => (
+                <span
+                  key={index}
+                  className="px-3 py-1.5 bg-[#0F0F0F] border border-[#2A2A2A] rounded-full text-sm text-[#9CA3AF]"
+                >
+                  {interest}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Availability Section */}
       <div className="px-4 mb-6">
@@ -278,13 +365,18 @@ export function ProfileScreen({
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-white">Availability</h3>
             <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" defaultChecked={isAvailable} onChange={(e) => setIsAvailable(e.target.checked)} />
+              <input 
+                type="checkbox" 
+                className="sr-only peer" 
+                checked={isAvailable} 
+                onChange={(e) => handleToggleAvailability(e.target.checked)} 
+              />
               <div className="w-11 h-6 bg-[#2A2A2A] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#4FD1C5] peer-checked:to-[#5FB3B3]"></div>
             </label>
           </div>
           <div className="flex items-center gap-2 text-sm text-[#4FD1C5]">
             <div className="w-2 h-2 bg-[#4FD1C5] rounded-full animate-pulse" />
-            <span>Available now</span>
+            <span>{isAvailable ? 'Available now' : 'Not available'}</span>
           </div>
           <div className="flex items-center gap-2 mt-2 text-sm text-[#9CA3AF]">
             <Calendar className="w-4 h-4" />
@@ -319,15 +411,21 @@ export function ProfileScreen({
       </div>
 
       {/* Modals */}
-      {showEditProfile && (
+      {showEditProfile && currentUser && (
         <EditProfileModal
           isOpen={showEditProfile}
-          currentData={currentUser}
+          currentData={{
+            name: currentUser.name,
+            age: currentUser.age,
+            location: currentUser.location,
+            bio: currentUser.bio,
+            avatar: currentUser.avatar
+          }}
           onSave={handleSaveProfile}
           onClose={() => setShowEditProfile(false)}
         />
       )}
-      {showLanguageEditor && (
+      {showLanguageEditor && currentUser && (
         <LanguageEditorModal
           isOpen={showLanguageEditor}
           type={languageEditType}
@@ -336,7 +434,7 @@ export function ProfileScreen({
           onClose={() => setShowLanguageEditor(false)}
         />
       )}
-      {showInterestsEditor && (
+      {showInterestsEditor && currentUser && (
         <InterestsEditorModal
           isOpen={showInterestsEditor}
           currentInterests={currentUser.interests}

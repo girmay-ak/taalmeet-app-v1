@@ -1,9 +1,13 @@
 PODS:
+  - EXApplication (5.9.1):
+    - ExpoModulesCore
   - EXConstants (18.0.10):
     - ExpoModulesCore
   - EXImageLoader (6.0.0):
     - ExpoModulesCore
     - React-Core
+  - EXNotifications (0.28.19):
+    - ExpoModulesCore
   - Expo (54.0.25):
     - ExpoModulesCore
     - hermes-engine
@@ -2183,8 +2187,10 @@ PODS:
   - Yoga (0.0.0)
 
 DEPENDENCIES:
+  - EXApplication (from `../node_modules/expo-application/ios`)
   - EXConstants (from `../node_modules/expo-constants/ios`)
   - EXImageLoader (from `../node_modules/expo-image-loader/ios`)
+  - EXNotifications (from `../node_modules/expo-notifications/ios`)
   - Expo (from `../node_modules/expo`)
   - ExpoAsset (from `../node_modules/expo-asset/ios`)
   - ExpoDevice (from `../node_modules/expo-device/ios`)
@@ -2295,10 +2301,14 @@ SPEC REPOS:
     - Turf
 
 EXTERNAL SOURCES:
+  EXApplication:
+    :path: "../node_modules/expo-application/ios"
   EXConstants:
     :path: "../node_modules/expo-constants/ios"
   EXImageLoader:
     :path: "../node_modules/expo-image-loader/ios"
+  EXNotifications:
+    :path: "../node_modules/expo-notifications/ios"
   Expo:
     :path: "../node_modules/expo"
   ExpoAsset:
@@ -2488,8 +2498,10 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
+  EXApplication: ec862905fdab3a15bf6bd8ca1a99df7fc02d7762
   EXConstants: fd688cef4e401dcf798a021cfb5d87c890c30ba3
   EXImageLoader: 189e3476581efe3ad4d1d3fb4735b7179eb26f05
+  EXNotifications: 6ce128c0d3d3d161cd68bfd07d593db40e140396
   Expo: 111394d38f32be09385d4c7f70cc96d2da438d0d
   ExpoAsset: d839c8eae8124470332408427327e8f88beb2dfd
   ExpoDevice: 148accb4071873d19fba80a2506c58ffa433d620

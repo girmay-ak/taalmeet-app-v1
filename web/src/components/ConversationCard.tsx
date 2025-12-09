@@ -4,18 +4,79 @@ import { motion } from 'framer-motion';
 interface ConversationCardProps {
   conversation: {
     id: string;
-    partnerName: string;
-    partnerAvatar: string;
-    isOnline: boolean;
-    lastMessage: string;
-    timestamp: string;
-    unreadCount: number;
-    isPinned: boolean;
+    partnerName?: string;
+    partnerAvatar?: string;
+    isOnline?: boolean;
+    lastMessage?: string;
+    timestamp?: string;
+    unreadCount?: number;
+    isPinned?: boolean;
+    // Backend fields (camelCase from messagesService)
+    otherUser?: {
+      id: string;
+      displayName?: string;
+      name?: string;
+      avatarUrl?: string;
+      isOnline?: boolean;
+    };
+    lastMessageAt?: string;
+    // Backend fields (snake_case - legacy support)
+    other_user?: {
+      id: string;
+      display_name?: string;
+      name?: string;
+      avatar_url?: string;
+      is_online?: boolean;
+    };
+    last_message?: {
+      content?: string;
+      created_at?: string;
+    };
+    unread_count?: number;
+    updated_at?: string;
   };
   onClick?: () => void;
 }
 
 export function ConversationCard({ conversation, onClick }: ConversationCardProps) {
+  // Support both mock and backend data structures
+  // Check camelCase first (from messagesService), then snake_case (legacy), then mock format
+  const partnerName = conversation.partnerName 
+    || conversation.otherUser?.displayName 
+    || conversation.otherUser?.name
+    || conversation.other_user?.display_name 
+    || conversation.other_user?.name 
+    || 'Unknown';
+  
+  const partnerAvatar = conversation.partnerAvatar 
+    || conversation.otherUser?.avatarUrl
+    || conversation.other_user?.avatar_url 
+    || `https://ui-avatars.com/api/?name=${encodeURIComponent(partnerName)}&background=1DB954&color=fff`;
+  
+  const isOnline = conversation.isOnline 
+    || conversation.otherUser?.isOnline 
+    || conversation.other_user?.is_online 
+    || false;
+  
+  const lastMessage = conversation.lastMessage 
+    || conversation.last_message?.content 
+    || 'No messages yet';
+  
+  const unreadCount = conversation.unreadCount 
+    || conversation.unread_count 
+    || 0;
+  
+  const timestamp = conversation.timestamp 
+    || (conversation.lastMessageAt
+      ? new Date(conversation.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : conversation.last_message?.created_at 
+      ? new Date(conversation.last_message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : conversation.updated_at 
+      ? new Date(conversation.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '');
+  
+  const isPinned = conversation.isPinned || false;
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
@@ -27,11 +88,11 @@ export function ConversationCard({ conversation, onClick }: ConversationCardProp
       {/* Avatar */}
       <div className="relative flex-shrink-0">
         <img
-          src={conversation.partnerAvatar}
-          alt={conversation.partnerName}
+          src={partnerAvatar}
+          alt={partnerName}
           className="w-14 h-14 rounded-full object-cover"
         />
-        {conversation.isOnline && (
+        {isOnline && (
           <div className="absolute bottom-0 right-0 w-4 h-4 bg-[#4FD1C5] border-2 border-[#0F0F0F] rounded-full" />
         )}
       </div>
@@ -41,28 +102,30 @@ export function ConversationCard({ conversation, onClick }: ConversationCardProp
         <div className="flex items-start justify-between mb-1">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-white truncate">
-              {conversation.partnerName}
+              {partnerName}
             </h3>
-            {conversation.isPinned && (
+            {isPinned && (
               <Pin className="w-3.5 h-3.5 text-[#5FB3B3] flex-shrink-0" />
             )}
           </div>
-          <span className="text-xs text-[#9CA3AF] flex-shrink-0 ml-2">
-            {conversation.timestamp}
-          </span>
+          {timestamp && (
+            <span className="text-xs text-[#9CA3AF] flex-shrink-0 ml-2">
+              {timestamp}
+            </span>
+          )}
         </div>
         
         <div className="flex items-center justify-between gap-2">
           <p 
             className={`text-sm truncate ${
-              conversation.unreadCount > 0 ? 'text-white font-medium' : 'text-[#9CA3AF]'
+              unreadCount > 0 ? 'text-white font-medium' : 'text-[#9CA3AF]'
             }`}
           >
-            {conversation.lastMessage}
+            {lastMessage}
           </p>
-          {conversation.unreadCount > 0 && (
+          {unreadCount > 0 && (
             <span className="flex-shrink-0 bg-gradient-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-              {conversation.unreadCount}
+              {unreadCount}
             </span>
           )}
         </div>

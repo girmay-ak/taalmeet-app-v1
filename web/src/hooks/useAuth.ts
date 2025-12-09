@@ -7,9 +7,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as authService from '@/services/authService';
 import * as profileService from '@/services/profileService';
 import type { SignInInput } from '@/services/authService';
+import { useAuth } from '../providers/AuthProvider';
 
 // Re-export the auth context hook
-export { useAuth as useAuthContext } from '../providers/AuthProvider';
+export { useAuth as useAuthContext };
 
 // ============================================================================
 // TYPES
@@ -76,7 +77,7 @@ export function useCurrentUser() {
  */
 export function useSignIn() {
   const queryClient = useQueryClient();
-  const { refreshProfile } = useAuthContext();
+  const { refreshProfile } = useAuth();
 
   return useMutation({
     mutationFn: (input: SignInInput) => authService.signIn(input),

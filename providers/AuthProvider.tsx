@@ -79,7 +79,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const userProfile = await profileService.getCurrentUserProfile();
         
         if (isMounted.current) {
-          setProfile(userProfile);
+        setProfile(userProfile);
           setProfileLoading(false);
         }
         
