@@ -8,6 +8,7 @@ import {
   DatabaseError,
   ValidationError,
   RecordNotFoundError,
+  NetworkError,
   parseSupabaseError,
 } from '@/utils/errors';
 import type { Profile, UserLanguage } from '@/types/database';
@@ -62,7 +63,25 @@ export async function updateUserLocation(
   }
 
   // Get current user from Supabase auth
-  const { data: { user } } = await supabase.auth.getUser();
+  let user;
+  try {
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      // Check if it's a network error
+      if (authError.message?.includes('Network') || authError.message?.includes('fetch')) {
+        throw new NetworkError('Network request failed. Please check your internet connection.');
+      }
+      throw parseSupabaseError(authError);
+    }
+    user = authUser;
+  } catch (error) {
+    // Re-throw network errors and parsed errors
+    if (error instanceof NetworkError || error instanceof ValidationError) {
+      throw error;
+    }
+    throw parseSupabaseError(error as any);
+  }
+
   if (!user) {
     throw new ValidationError('User must be authenticated to update location.');
   }

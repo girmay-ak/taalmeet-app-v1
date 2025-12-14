@@ -487,3 +487,5 @@ Total: ~60px
 
 **Refresh your browser to see the new compact header!** 🚀✨
 
+
+

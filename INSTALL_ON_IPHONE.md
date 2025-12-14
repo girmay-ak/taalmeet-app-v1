@@ -1,209 +1,66 @@
-# Install TAALMEET on Your iPhone - Simple Guide
+# Install TAALMEET on Your iPhone
 
-## 🎯 Quick Setup (10-15 minutes)
+## Step 1: Build for Physical Device
 
-### Step 1: Open Xcode ✅
+The build configuration has been updated to build for physical iOS devices (not simulator).
 
-Run this command to open your project:
+## Step 2: Start the Build
 
-```bash
-cd /Users/girmay/Documents/taalmeet-app-v1/ios
-open TAALMEET.xcworkspace
-```
-
-**Important**: Open `.xcworkspace` NOT `.xcodeproj`
-
----
-
-### Step 2: Configure Signing in Xcode 📝
-
-Once Xcode opens:
-
-1. **In left sidebar**: Click on **TAALMEET** (blue icon at top)
-   
-2. **In main panel**: 
-   - Make sure **TAALMEET** target is selected (not TALMEETTests)
-   - Click **"Signing & Capabilities"** tab
-   
-3. **Configure signing**:
-   - ✅ Check **"Automatically manage signing"**
-   - **Team**: Select your Apple Developer account
-     - If you don't see it: Xcode → Preferences → Accounts → Add Apple ID
-   - **Bundle Identifier**: Should be `org.reactjs.native.example.TAALMEET`
-     - If you see error, change it to something unique like:
-     - `com.taalmeet.app` or `com.girmay.taalmeet`
-
-4. **Wait for provisioning**:
-   - Xcode will automatically create provisioning profile
-   - You'll see "Provisioning profile... created" ✅
-
----
-
-### Step 3: Connect Your iPhone 📱
-
-1. **Connect iPhone to Mac** with USB cable
-   
-2. **Unlock iPhone** and tap **"Trust This Computer"** if prompted
-   
-3. **In Xcode top bar**: 
-   - Click device dropdown (next to ▶️ button)
-   - Select your iPhone name (e.g., "Girmay's iPhone")
-   - Should show as "Connected" with green dot
-
----
-
-### Step 4: Build & Install 🚀
-
-1. **Click ▶️ (Play) button** in Xcode top-left
-   
-2. **Wait for build** (2-5 minutes first time)
-   - You'll see progress at top: "Building TAALMEET..."
-   - Watch for any errors in console
-
-3. **Build completes**: 
-   - Xcode will install app on your iPhone
-   - You'll see "Running TAALMEET on [Your iPhone]"
-
-4. **On your iPhone**:
-   - App icon appears on home screen
-   - But can't open it yet (need to trust developer)
-
----
-
-### Step 5: Trust Developer Certificate 🔒
-
-**First time only**:
-
-1. On iPhone: **Settings** → **General** → **VPN & Device Management**
-   
-2. Under **"Developer App"**: 
-   - Tap your Apple Developer account
-   - Tap **"Trust [Your Name]"**
-   - Confirm **"Trust"**
-
-3. **Now open TAALMEET app** on iPhone! 🎉
-
----
-
-## ✅ VERIFICATION
-
-App should:
-- ✅ Open to splash screen
-- ✅ Show sign-in screen (if not logged in)
-- ✅ Allow you to login
-- ✅ Show map with your location
-- ✅ Show nearby users
-- ✅ All features work
-
----
-
-## 🔄 MAKING UPDATES
-
-After you make code changes:
-
-1. **Make changes** in your code editor
-2. **In Xcode**: Click ▶️ Run again
-3. **Wait 30-60 seconds** for rebuild
-4. **App updates** on your iPhone automatically
-
-No need to reinstall or retrust!
-
----
-
-## 🐛 TROUBLESHOOTING
-
-### "Failed to create provisioning profile"
-**Fix**: 
-1. Change Bundle Identifier to something unique
-2. Format: `com.yourname.taalmeet`
-3. Must be unique across all apps
-
-### "No accounts found"
-**Fix**: 
-1. Xcode → Preferences (Cmd+,)
-2. Accounts tab
-3. Click "+" → Add Apple ID
-4. Sign in with your Apple Developer account
-
-### "Code signing error"
-**Fix**:
-1. Uncheck "Automatically manage signing"
-2. Then check it again
-3. Xcode will regenerate certificates
-
-### "iPhone is not connected"
-**Fix**:
-1. Unplug and replug iPhone
-2. Restart Xcode
-3. Make sure iPhone is unlocked
-4. Trust computer if prompted
-
-### Build fails with pod errors
-**Fix**:
-```bash
-cd /Users/girmay/Documents/taalmeet-app-v1/ios
-pod deintegrate
-pod install
-```
-
-### "No space on device"
-**Fix**: Free up space on iPhone (need ~500MB)
-
----
-
-## 💡 PRO TIPS
-
-### Tip 1: Wireless Debugging (After first install)
-1. Xcode → Window → Devices and Simulators
-2. Select your iPhone
-3. Check "Connect via network"
-4. Disconnect USB - can now build wirelessly! 📡
-
-### Tip 2: Console Logs
-- View → Debug Area → Show Debug Area (Cmd+Shift+Y)
-- See all `console.log()` from your app in real-time
-
-### Tip 3: Faster Builds
-- Keep Xcode open
-- Don't clean build between changes
-- First build is slow (5 min), subsequent builds are fast (30-60 sec)
-
-### Tip 4: Hot Reload
-The app uses Expo - you can shake iPhone to open dev menu and reload
-
----
-
-## 🎯 READY TO START?
-
-Run these commands **right now**:
+Run this command to build for your iPhone:
 
 ```bash
-cd /Users/girmay/Documents/taalmeet-app-v1/ios
-open TAALMEET.xcworkspace
+eas build --profile development --platform ios
 ```
 
-Then:
-1. ✅ Configure signing (Team → Your Apple Developer account)
-2. ✅ Connect iPhone
-3. ✅ Click ▶️ Run
-4. ✅ Trust developer on iPhone
-5. ✅ Open app and test!
+## Step 3: Install on Your iPhone
 
-**It's that simple!** 🚀
+After the build completes, you'll get a QR code and download link. You have two options:
 
----
+### Option A: Install via QR Code (Easiest)
+1. Open your iPhone camera app
+2. Scan the QR code shown in the terminal
+3. Tap the notification that appears
+4. The app will download and install
 
-## 📞 NEED HELP?
+### Option B: Install via Link
+1. Open the build link on your iPhone (e.g., `https://expo.dev/accounts/gm25/projects/taalmeet/builds/...`)
+2. Tap "Install" or "Download"
+3. The app will download and install
 
-Tell me:
-- "I'm stuck at signing"
-- "I get error: [error message]"
-- "iPhone not showing in Xcode"
-- "Build failed with [error]"
+## Step 4: Trust the Developer Certificate
 
-I'll help you fix it! 💪
+After installing, you may need to trust the developer certificate:
 
----
+1. Go to **Settings** > **General** > **VPN & Device Management** (or **Profiles & Device Management**)
+2. Find your developer certificate (should show your Apple ID email)
+3. Tap it and select **Trust**
+4. Confirm by tapping **Trust** again
 
-**Let's get your app on your iPhone!** 🎉
+## Step 5: Open the App
 
+1. Find the TAALMEET app on your home screen
+2. Tap to open it
+3. The app should launch!
+
+## Troubleshooting
+
+### "Untrusted Developer" Error
+- Go to Settings > General > VPN & Device Management
+- Trust your developer certificate
+
+### App Won't Install
+- Make sure your iPhone is connected to the internet
+- Check that you're using the same Apple ID that was used for the build
+- Try deleting the app and reinstalling
+
+### Build Fails
+- Make sure you have a valid Apple Developer account
+- Check that your EAS environment variables are set correctly
+- Verify your Mapbox tokens are correct in EAS
+
+## Next Steps
+
+After installing, you can:
+- Connect to the development server by running `npx expo start --dev-client`
+- Test all features on your physical device
+- Use real GPS location (instead of simulator location)

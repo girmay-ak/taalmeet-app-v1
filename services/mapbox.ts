@@ -1,19 +1,35 @@
 /**
  * Mapbox Service
- * Sets up Mapbox access token and exports Mapbox instance
+ * Exports Mapbox SDK for use throughout the app
+ * Conditionally imports to handle when native code is not available
  */
 
-import Mapbox from '@rnmapbox/maps';
-import { MAPBOX_ACCESS_TOKEN } from '@/lib/config';
+let Mapbox: any = null;
+let isMapboxAvailable = false;
 
-// Set access token
-if (MAPBOX_ACCESS_TOKEN) {
-  Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
-} else {
-  console.warn(
-    'Mapbox access token is missing. Please add EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN to your .env file.'
-  );
+try {
+  const mapboxModule = require('@rnmapbox/maps');
+  Mapbox = mapboxModule?.default || mapboxModule;
+  // Check if Mapbox is actually available (has required methods)
+  if (Mapbox && typeof Mapbox.setAccessToken === 'function') {
+    isMapboxAvailable = true;
+    console.log('[Mapbox] ✅ Native code is available');
+  } else {
+    console.warn('[Mapbox] ⚠️ Mapbox module loaded but missing required methods');
+    isMapboxAvailable = false;
+  }
+} catch (error: any) {
+  // Silently handle error - Mapbox not available in Expo Go
+  // Only log in development
+  if (__DEV__) {
+    console.warn('[Mapbox] ❌ Native code not available:', error?.message || error);
+    console.warn('[Mapbox] This is normal in Expo Go. Build with EAS or run "npx expo prebuild" to use Mapbox.');
+  }
+  isMapboxAvailable = false;
+  Mapbox = null;
 }
 
-export { Mapbox };
+// Re-export Mapbox for convenience
+export { Mapbox, isMapboxAvailable };
+export default Mapbox;
 

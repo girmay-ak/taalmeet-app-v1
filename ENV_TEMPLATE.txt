@@ -21,6 +21,15 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 # Google Maps API Key (if needed)
 # EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your-google-maps-api-key
 
+# Mapbox Access Token (for maps - optional, falls back to Google Maps if not set)
+# Get from: https://account.mapbox.com/access-tokens/
+# EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=pk.your-mapbox-token-here
+
+# Mapbox Download Token (for EAS builds - required for @rnmapbox/maps)
+# Get from: https://account.mapbox.com/access-tokens/
+# Create a secret token with "DOWNLOADS:READ" scope
+# RNMAPBOX_MAPS_DOWNLOAD_TOKEN=sk.your-download-token-here
+
 # ==========================================
 # HOW TO SET UP:
 # ==========================================

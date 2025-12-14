@@ -20,6 +20,13 @@ platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 
 prepare_react_native_project!
 
+# @generated begin @rnmapbox/maps-rnmapboxmapsimpl - expo prebuild (DO NOT MODIFY) sync-ac62105a270fb02508cc1bec02b949f8bd4a92c7
+$RNMapboxMapsDownloadToken = ENV['RNMAPBOX_MAPS_DOWNLOAD_TOKEN']
+# Ensure the token is available in shell environment for CocoaPods podspecs
+if $RNMapboxMapsDownloadToken && !ENV['RNMAPBOX_MAPS_DOWNLOAD_TOKEN']
+  ENV['RNMAPBOX_MAPS_DOWNLOAD_TOKEN'] = $RNMapboxMapsDownloadToken
+end
+# @generated end @rnmapbox/maps-rnmapboxmapsimpl
 target 'TAALMEET' do
   use_expo_modules!
 
@@ -36,6 +43,9 @@ target 'TAALMEET' do
     ]
   end
 
+# @generated begin react-native-maps - expo prebuild (DO NOT MODIFY) sync-e9cc66c360abe50bc66d89fffb3c55b034d7d369
+  pod 'react-native-google-maps', path: File.dirname(`node --print "require.resolve('react-native-maps/package.json')"`)
+# @generated end react-native-maps
   config = use_native_modules!(config_command)
 
   use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if podfile_properties['ios.useFrameworks']
