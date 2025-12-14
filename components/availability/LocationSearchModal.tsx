@@ -40,6 +40,27 @@ export function LocationSearchModal({
   const [recentLocations, setRecentLocations] = useState<LocationResult[]>([]);
   const [showAddCustom, setShowAddCustom] = useState(false);
   const [customAddress, setCustomAddress] = useState('');
+  const [popularPlaces, setPopularPlaces] = useState<LocationResult[]>([]);
+
+  // Load popular places for current city when modal opens
+  useEffect(() => {
+    if (isOpen && currentLocation && !searchQuery) {
+      const loadPopularPlaces = async () => {
+        try {
+          const places = await locationSearchService.getPopularPlaces(
+            currentLocation.latitude,
+            currentLocation.longitude
+          );
+          setPopularPlaces(places);
+        } catch (error) {
+          console.error('Error loading popular places:', error);
+        }
+      };
+      loadPopularPlaces();
+    } else {
+      setPopularPlaces([]);
+    }
+  }, [isOpen, currentLocation, searchQuery]);
 
   // Search with debounce
   useEffect(() => {
@@ -62,7 +83,7 @@ export function LocationSearchModal({
       } finally {
         setIsSearching(false);
       }
-    }, 500);
+    }, 300); // Reduced debounce time for better responsiveness
 
     return () => clearTimeout(searchTimeout);
   }, [searchQuery, currentLocation]);
@@ -127,6 +148,8 @@ export function LocationSearchModal({
         return '📚';
       case 'park':
         return '🌳';
+      case 'custom':
+        return '📍';
       default:
         return '📍';
     }
@@ -242,7 +265,7 @@ export function LocationSearchModal({
           </View>
         ) : (
           <FlatList
-            data={searchQuery ? searchResults : recentLocations}
+            data={searchQuery ? searchResults : (popularPlaces.length > 0 ? popularPlaces : recentLocations)}
             renderItem={renderLocationItem}
             keyExtractor={(item) => item.id}
             style={styles.list}
@@ -275,8 +298,22 @@ export function LocationSearchModal({
               </View>
             }
             ListHeaderComponent={
-              !searchQuery && recentLocations.length > 0 ? (
-                <Text style={[styles.sectionTitle, { color: colors.text.muted }]}>Recent</Text>
+              !searchQuery && (popularPlaces.length > 0 || recentLocations.length > 0) ? (
+                <View>
+                  {popularPlaces.length > 0 && (
+                    <Text style={[styles.sectionTitle, { color: colors.text.muted }]}>
+                      Popular Places Nearby
+                    </Text>
+                  )}
+                  {recentLocations.length > 0 && popularPlaces.length > 0 && (
+                    <Text style={[styles.sectionTitle, { color: colors.text.muted, marginTop: 24 }]}>
+                      Recent
+                    </Text>
+                  )}
+                  {recentLocations.length > 0 && popularPlaces.length === 0 && (
+                    <Text style={[styles.sectionTitle, { color: colors.text.muted }]}>Recent</Text>
+                  )}
+                </View>
               ) : null
             }
           />
@@ -375,8 +412,15 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 12,
   },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   locationIcon: {
-    fontSize: 24,
+    fontSize: 20,
   },
   locationItemText: {
     flex: 1,

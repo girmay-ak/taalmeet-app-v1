@@ -62,12 +62,19 @@ export function useSignIn() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: SignInInput) => authService.signIn(input),
-    onSuccess: () => {
+    mutationFn: async (input: SignInInput) => {
+      return authService.signIn(input);
+    },
+    onSuccess: async (data) => {
       // Invalidate and refetch auth data
       queryClient.invalidateQueries({ queryKey: authKeys.all });
       
+      // Wait a brief moment for auth state to propagate
+      // This ensures the AuthProvider has processed the session change
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       // Navigate to main app
+      // The AuthProvider will handle profile loading
       router.replace('/(tabs)');
     },
     onError: (error) => {

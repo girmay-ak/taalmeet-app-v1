@@ -1,13 +1,46 @@
+import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react-swc';
+import path from 'path';
 
-  import { defineConfig } from 'vite';
-  import react from '@vitejs/plugin-react-swc';
-  import path from 'path';
-
-  export default defineConfig({
+export default defineConfig(({ mode }) => {
+  // Load env file based on `mode` in the current working directory.
+  const env = loadEnv(mode, process.cwd(), '');
+  
+  // Resolve paths once for clarity
+  const rootDir = path.resolve(__dirname);
+  const srcDir = path.resolve(rootDir, './src');
+  const servicesDir = path.resolve(rootDir, '../services');
+  const utilsDir = path.resolve(rootDir, '../utils');
+  const typesDir = path.resolve(rootDir, '../types');
+  const hooksDir = path.resolve(rootDir, '../hooks');
+  const libDir = path.resolve(rootDir, '../lib');
+  
+  return {
     plugins: [react()],
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
       alias: {
+        // Expo module stubs for web compatibility
+        'expo-notifications': path.resolve(srcDir, './lib/stubs/expo-notifications.js'),
+        'expo-constants': path.resolve(srcDir, './lib/stubs/expo-constants.js'),
+        'expo-device': path.resolve(srcDir, './lib/stubs/expo-device.js'),
+        'expo-modules-core': path.resolve(srcDir, './lib/stubs/expo-modules-core.js'),
+        'expo-location': path.resolve(srcDir, './lib/stubs/expo-location.js'),
+        'expo-file-system': path.resolve(srcDir, './lib/stubs/expo-file-system.js'),
+        'expo-file-system/legacy': path.resolve(srcDir, './lib/stubs/expo-file-system.js'),
+        'react-native': path.resolve(srcDir, './lib/stubs/react-native.js'),
+        // Path aliases - more specific first
+        '@/services': servicesDir,
+        '@/lib': path.resolve(srcDir, './lib'),
+        '@/utils': utilsDir,
+        '@/types': typesDir,
+        '@/shared/hooks': hooksDir,
+        '@/shared/types': typesDir,
+        '@/shared/lib': libDir,
+        '@/shared': servicesDir,
+        // General @ alias (less specific, comes after)
+        '@': srcDir,
+        // Package aliases (for version-specific imports)
         'vaul@1.1.2': 'vaul',
         'sonner@2.0.3': 'sonner',
         'recharts@2.15.2': 'recharts',
@@ -46,20 +79,37 @@
         '@radix-ui/react-aspect-ratio@1.1.2': '@radix-ui/react-aspect-ratio',
         '@radix-ui/react-alert-dialog@1.1.6': '@radix-ui/react-alert-dialog',
         '@radix-ui/react-accordion@1.2.3': '@radix-ui/react-accordion',
-        '@': path.resolve(__dirname, './src'),
-        // Shared code aliases for monorepo structure
-        '@/shared': path.resolve(__dirname, '../services'),
-        '@/shared/hooks': path.resolve(__dirname, '../hooks'),
-        '@/shared/types': path.resolve(__dirname, '../types'),
-        '@/shared/lib': path.resolve(__dirname, '../lib'),
       },
     },
     build: {
       target: 'esnext',
       outDir: 'build',
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // Separate vendor chunks for better caching
+            'react-vendor': ['react', 'react-dom'],
+            'supabase-vendor': ['@supabase/supabase-js'],
+            'ui-vendor': [
+              '@radix-ui/react-dialog',
+              '@radix-ui/react-dropdown-menu',
+              '@radix-ui/react-select',
+              '@radix-ui/react-tabs',
+            ],
+            'query-vendor': ['@tanstack/react-query'],
+          },
+        },
+      },
+      chunkSizeWarningLimit: 1000, // Increase limit to 1MB
     },
     server: {
       port: 3000,
       open: true,
     },
-  });
+    define: {
+      // Vite automatically exposes VITE_* variables via import.meta.env
+      // Define __DEV__ for React Native compatibility
+      __DEV__: JSON.stringify(mode === 'development'),
+    },
+  };
+});

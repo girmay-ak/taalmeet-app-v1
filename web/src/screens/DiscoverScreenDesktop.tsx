@@ -1,55 +1,144 @@
-import { useState, useEffect } from 'react';
-import { Bell, Search, MapPin, Calendar, TrendingUp, Users, Sparkles, Filter, ChevronRight, Star } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Bell, Search, MapPin, Calendar, TrendingUp, Users, Sparkles, Filter, ChevronRight, Star, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { SessionCard } from '../components/SessionCard';
-import { mockSessions, languageCategories } from '../data/mockSessions';
-import { mockPartners } from '../data/mockData';
-import { mockNotifications } from '../data/mockNotifications';
 import { MapView } from '../components/MapView';
-import { LanguageSession } from '../data/mockSessions';
+import { useAuth } from '../providers/AuthProvider';
+import { useDiscoverFeed } from '../hooks/useDiscover';
+import { useSessions } from '../hooks/useSessions';
+import { useConversations } from '../hooks/useMessages';
+import { useProfile } from '../hooks/useProfile';
 
 interface DiscoverScreenDesktopProps {
   onPartnerClick: (partnerId: string) => void;
   onNavigateToChat?: (partnerId: string) => void;
-  onSessionClick: (session: LanguageSession) => void;
+  onSessionClick: (session: any) => void;
 }
 
+// Language categories - can be extracted from user's languages or use common ones
+const languageCategories = ['All', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Japanese', 'Korean', 'Chinese', 'Arabic', 'Hindi', 'Russian'];
+
 export function DiscoverScreenDesktop({ onPartnerClick, onNavigateToChat, onSessionClick }: DiscoverScreenDesktopProps) {
+  const { user } = useAuth();
+  const { data: profile } = useProfile();
   const [selectedLanguage, setSelectedLanguage] = useState('All');
   const [showNotifications, setShowNotifications] = useState(false);
   const [viewMode, setViewMode] = useState<'map' | 'grid'>('map');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const onlineNearby = mockPartners.filter(p => p.isOnline && p.distance < 2);
-  const unreadCount = mockNotifications.filter(n => !n.isRead).length;
+  // Fetch data from backend
+  const { data: discoverFeed, isLoading: discoverLoading } = useDiscoverFeed({
+    language: selectedLanguage !== 'All' ? selectedLanguage : undefined,
+    availabilityOnly: false,
+    limit: 50,
+  });
 
-  // Filter sessions
-  const filteredSessions = selectedLanguage === 'All'
-    ? mockSessions
-    : mockSessions.filter(s => s.language === selectedLanguage);
+  const { data: sessionsData, isLoading: sessionsLoading } = useSessions({
+    language: selectedLanguage !== 'All' ? selectedLanguage : undefined,
+  }, !!user?.id);
+
+  const { data: conversations = [], isLoading: conversationsLoading } = useConversations();
+
+  // Get unread messages count
+  const unreadCount = useMemo(() => {
+    return conversations.filter((conv: any) => conv.unreadCount > 0).length;
+  }, [conversations]);
+
+  // Get recommended/active users from discover feed
+  const allPartners = useMemo(() => {
+    const users = discoverFeed?.recommendedUsers || [];
+    const active = discoverFeed?.activeUsers || [];
+    const newUsers = discoverFeed?.newUsers || [];
+    
+    // Combine and deduplicate by id
+    const userMap = new Map();
+    [...users, ...active, ...newUsers].forEach((user: any) => {
+      if (!userMap.has(user.id)) {
+        userMap.set(user.id, user);
+      }
+    });
+    
+    return Array.from(userMap.values());
+  }, [discoverFeed]);
+
+  // Filter partners by search query
+  const filteredPartners = useMemo(() => {
+    if (!searchQuery.trim()) return allPartners;
+    
+    const query = searchQuery.toLowerCase();
+    return allPartners.filter((partner: any) => {
+      const name = partner.display_name?.toLowerCase() || '';
+      const languages = partner.languages?.map((l: any) => l.language?.toLowerCase()).join(' ') || '';
+      return name.includes(query) || languages.includes(query);
+    });
+  }, [allPartners, searchQuery]);
+
+  // Get online nearby partners (within 2km)
+  const onlineNearby = useMemo(() => {
+    return filteredPartners.filter((partner: any) => {
+      const distance = partner.distance_km || partner.distance || 999;
+      return (partner.is_online || partner.availability_status === 'available') && distance < 2;
+    });
+  }, [filteredPartners]);
+
+  // Get sessions from discover feed or sessions hook
+  const sessions = useMemo(() => {
+    const discoverSessions = discoverFeed?.sessions || [];
+    const hookSessions = sessionsData?.sessions || sessionsData || [];
+    return discoverSessions.length > 0 ? discoverSessions : hookSessions;
+  }, [discoverFeed, sessionsData]);
+
+  // Filter sessions by selected language
+  const filteredSessions = useMemo(() => {
+    if (selectedLanguage === 'All') return sessions;
+    return sessions.filter((session: any) => {
+      return session.language?.toLowerCase() === selectedLanguage.toLowerCase() ||
+             session.languages?.some((l: any) => l.toLowerCase() === selectedLanguage.toLowerCase());
+    });
+  }, [sessions, selectedLanguage]);
+
+  // Convert partners for map display
+  const mapPartners = useMemo(() => {
+    return filteredPartners.slice(0, 15).map((partner: any) => {
+      const teachingLang = partner.languages?.find((l: any) => l.role === 'teaching');
+      const learningLang = partner.languages?.find((l: any) => l.role === 'learning');
+      
+      return {
+        id: partner.id,
+        name: partner.display_name || 'User',
+        avatar: partner.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(partner.display_name || 'User')}&background=1DB954&color=fff`,
+        distance: partner.distance_km || partner.distance || 0,
+        latitude: partner.lat || 51.5074 + (Math.random() - 0.5) * 0.08,
+        longitude: partner.lng || -0.1278 + (Math.random() - 0.5) * 0.08,
+        isOnline: partner.is_online || partner.availability_status === 'available',
+        languages: [
+          teachingLang?.language,
+          learningLang?.language
+        ].filter(Boolean),
+        rating: partner.matchScore || 4.8,
+      };
+    });
+  }, [filteredPartners]);
 
   // Quick stats
-  const stats = [
+  const stats = useMemo(() => [
     { icon: Users, label: 'Online Nearby', value: onlineNearby.length, color: '#1DB954' },
-    { icon: Calendar, label: 'Today\'s Events', value: filteredSessions.length, color: '#5FB3B3' },
-    { icon: TrendingUp, label: 'Active Now', value: '2.4K', color: '#F59E0B' },
-    { icon: Sparkles, label: 'New Matches', value: 12, color: '#E91E8C' },
-  ];
+    { icon: Calendar, label: "Today's Events", value: filteredSessions.length, color: '#5FB3B3' },
+    { icon: TrendingUp, label: 'Active Now', value: allPartners.length, color: '#F59E0B' },
+    { icon: Sparkles, label: 'New Matches', value: discoverFeed?.newUsers?.length || 0, color: '#E91E8C' },
+  ], [onlineNearby.length, filteredSessions.length, allPartners.length, discoverFeed]);
 
-  // Convert partners for map
-  const mapPartners = mockPartners.slice(0, 15).map((partner, index) => ({
-    id: partner.id,
-    name: partner.name,
-    avatar: partner.avatar,
-    distance: partner.distance,
-    latitude: 51.5074 + (Math.random() - 0.5) * 0.08,
-    longitude: -0.1278 + (Math.random() - 0.5) * 0.08,
-    isOnline: partner.isOnline,
-    languages: typeof partner.languages === 'string' 
-      ? partner.languages.split(' • ') 
-      : [partner.languages.native, partner.languages.learning].filter(Boolean),
-    rating: partner.rating,
-  }));
+  const isLoading = discoverLoading || sessionsLoading || conversationsLoading;
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-background)' }}>
+        <Loader2 className="w-8 h-8 animate-spin text-[#1DB954]" />
+        <p className="mt-4 text-[#9CA3AF]">Loading discover feed...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ backgroundColor: 'var(--color-background)' }}>
@@ -195,21 +284,29 @@ export function DiscoverScreenDesktop({ onPartnerClick, onNavigateToChat, onSess
               </h3>
             </div>
             <div className="space-y-3">
-              {filteredSessions.slice(0, 6).map((session, index) => (
-                <motion.div
-                  key={session.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <SessionCard session={session} onClick={() => onSessionClick(session)} />
-                </motion.div>
-              ))}
-              {filteredSessions.length > 6 && (
-                <button className="w-full py-3 rounded-xl text-sm font-medium transition-colors hover:bg-opacity-80" style={{ backgroundColor: 'var(--color-card)', color: 'var(--color-text)' }}>
-                  View All {filteredSessions.length} Events
-                  <ChevronRight className="w-4 h-4 inline ml-1" />
-                </button>
+              {filteredSessions.length > 0 ? (
+                <>
+                  {filteredSessions.slice(0, 6).map((session: any, index: number) => (
+                    <motion.div
+                      key={session.id || index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                    >
+                      <SessionCard session={session} onClick={() => onSessionClick(session)} />
+                    </motion.div>
+                  ))}
+                  {filteredSessions.length > 6 && (
+                    <button className="w-full py-3 rounded-xl text-sm font-medium transition-colors hover:bg-opacity-80" style={{ backgroundColor: 'var(--color-card)', color: 'var(--color-text)' }}>
+                      View All {filteredSessions.length} Events
+                      <ChevronRight className="w-4 h-4 inline ml-1" />
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-8 text-[#9CA3AF]">
+                  <p>No sessions scheduled for today</p>
+                </div>
               )}
             </div>
           </div>
@@ -243,8 +340,8 @@ export function DiscoverScreenDesktop({ onPartnerClick, onNavigateToChat, onSess
                 <MapView 
                   partners={mapPartners}
                   onPartnerClick={onPartnerClick}
-                  centerLat={51.5074}
-                  centerLng={-0.1278}
+                  centerLat={mapPartners[0]?.latitude || 51.5074}
+                  centerLng={mapPartners[0]?.longitude || -0.1278}
                 />
               </div>
             </>
@@ -252,58 +349,76 @@ export function DiscoverScreenDesktop({ onPartnerClick, onNavigateToChat, onSess
             <>
               {/* Grid Header */}
               <div className="px-6 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                <h3 className="font-semibold" style={{ color: 'var(--color-text)' }}>All Partners</h3>
+                <h3 className="font-semibold" style={{ color: 'var(--color-text)' }}>All Partners ({filteredPartners.length})</h3>
               </div>
               
               {/* Grid */}
               <div className="flex-1 overflow-y-auto p-6">
-                <div className="grid grid-cols-2 gap-4">
-                  {mockPartners.slice(0, 12).map((partner, index) => (
-                    <motion.div
-                      key={partner.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.05 }}
-                      onClick={() => onPartnerClick(partner.id)}
-                      className="rounded-xl p-4 border cursor-pointer hover:scale-105 transition-all"
-                      style={{ backgroundColor: 'var(--color-background)', borderColor: 'var(--color-border)' }}
-                    >
-                      <div className="relative mb-3">
-                        <img 
-                          src={partner.avatar}
-                          alt={partner.name}
-                          className="w-full aspect-square object-cover rounded-xl"
-                        />
-                        {partner.isOnline && (
-                          <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-[#10B981] text-white text-xs font-semibold">
-                            Online
+                {filteredPartners.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    {filteredPartners.slice(0, 12).map((partner: any, index: number) => {
+                      const teachingLang = partner.languages?.find((l: any) => l.role === 'teaching');
+                      const learningLang = partner.languages?.find((l: any) => l.role === 'learning');
+                      
+                      return (
+                        <motion.div
+                          key={partner.id}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: index * 0.05 }}
+                          onClick={() => onPartnerClick(partner.id)}
+                          className="rounded-xl p-4 border cursor-pointer hover:scale-105 transition-all"
+                          style={{ backgroundColor: 'var(--color-background)', borderColor: 'var(--color-border)' }}
+                        >
+                          <div className="relative mb-3">
+                            <img 
+                              src={partner.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(partner.display_name || 'User')}&background=1DB954&color=fff`}
+                              alt={partner.display_name || 'User'}
+                              className="w-full aspect-square object-cover rounded-xl"
+                            />
+                            {(partner.is_online || partner.availability_status === 'available') && (
+                              <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-[#10B981] text-white text-xs font-semibold">
+                                Online
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold text-sm" style={{ color: 'var(--color-text)' }}>{partner.name}</h4>
-                        <div className="flex items-center gap-0.5">
-                          <Star className="w-3 h-3 fill-[#F59E0B] text-[#F59E0B]" />
-                          <span className="text-xs" style={{ color: 'var(--color-text)' }}>{partner.rating}</span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-[#9CA3AF] mb-2">
-                        <MapPin className="w-3 h-3 inline mr-1" />
-                        {partner.distance}km away
-                      </p>
-                      <div className="flex gap-1">
-                        {(typeof partner.languages === 'string' 
-                          ? partner.languages.split(' • ') 
-                          : [partner.languages.native, partner.languages.learning].filter(Boolean)
-                        ).slice(0, 2).map(lang => (
-                          <span key={lang} className="px-2 py-0.5 rounded-full text-xs font-medium bg-gradient-primary text-white">
-                            {lang}
-                          </span>
-                        ))}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-semibold text-sm" style={{ color: 'var(--color-text)' }}>
+                              {partner.display_name || 'User'}
+                            </h4>
+                            {partner.matchScore && (
+                              <div className="flex items-center gap-0.5">
+                                <Star className="w-3 h-3 fill-[#F59E0B] text-[#F59E0B]" />
+                                <span className="text-xs" style={{ color: 'var(--color-text)' }}>{partner.matchScore.toFixed(1)}</span>
+                              </div>
+                            )}
+                          </div>
+                          {(partner.distance_km || partner.distance) && (
+                            <p className="text-xs text-[#9CA3AF] mb-2">
+                              <MapPin className="w-3 h-3 inline mr-1" />
+                              {(partner.distance_km || partner.distance).toFixed(1)}km away
+                            </p>
+                          )}
+                          <div className="flex gap-1">
+                            {[teachingLang?.language, learningLang?.language].filter(Boolean).slice(0, 2).map(lang => (
+                              <span key={lang} className="px-2 py-0.5 rounded-full text-xs font-medium bg-gradient-primary text-white">
+                                {lang}
+                              </span>
+                            ))}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-[#9CA3AF]">
+                    <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>No partners found</p>
+                    {searchQuery && (
+                      <p className="text-sm mt-2">Try adjusting your search or filters</p>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           )}

@@ -28,12 +28,14 @@ import {
   useConnections,
   useSendConnectionRequest,
   useConnectionRequests,
+  useSentConnectionRequests,
   useAcceptRequest,
 } from '@/hooks/useConnections';
 import { NotificationContainer } from '@/components/notifications/NotificationContainer';
 import { useMatchFound } from '@/providers/MatchFoundProvider';
 import type { ConnectionWithProfile } from '@/services/connectionsService';
 import * as Location from 'expo-location';
+import { MapErrorBoundary } from '@/components/map/MapErrorBoundary';
 // Conditionally import Mapbox (only if native code is available)
 let Mapbox: any = null;
 let MapboxMap: any = null;
@@ -74,6 +76,7 @@ interface Filters {
   maxDistance: number;
   availability: 'all' | 'now' | 'week';
   minMatchScore: number;
+  languages?: string[]; // Optional language filter
 }
 
 export default function MapScreen() {
@@ -92,6 +95,7 @@ export default function MapScreen() {
     maxDistance: 50,
     availability: 'all',
     minMatchScore: 0,
+    languages: [], // Initialize as empty array
   });
 
   const bottomSheetHeight = useRef(new Animated.Value(140)).current;
@@ -117,15 +121,30 @@ export default function MapScreen() {
     return {
       maxDistanceKm: filters.maxDistance,
       availability: availabilityMap[filters.availability] || 'all',
-      languages: currentUserLanguages,
+      // Only apply language filter if user has specified languages in UI filters
+      // Otherwise show all users (language matching is optional, not required)
+      // Backend expects:
+      // - learning: languages user wants to learn → finds partners who TEACH these
+      // - teaching: languages user teaches → finds partners who LEARN these
+      languages: filters.languages && filters.languages.length > 0 
+        ? {
+            // Languages user selected that they're learning → find partners who teach these
+            learning: filters.languages.filter(lang => currentUserLanguages.learning.includes(lang)),
+            // Languages user selected that they're teaching → find partners who learn these
+            teaching: filters.languages.filter(lang => currentUserLanguages.teaching.includes(lang)),
+          }
+        : undefined, // Don't filter by language if no languages selected in UI
     };
   }, [filters, currentUserLanguages]);
 
   // Fetch nearby users
   const { data: nearbyUsers = [], isLoading, error, refetch } = useNearbyUsers(backendFilters);
   
+  // Nearby users loaded
+  
   // Fetch connections to check connection status
   const { connections, requests: receivedRequests } = useConnections(user?.id);
+  const { data: sentRequests = [] } = useSentConnectionRequests(user?.id);
   const sendConnectionRequestMutation = useSendConnectionRequest();
   const acceptRequestMutation = useAcceptRequest();
   const { showMatch } = useMatchFound();
@@ -133,7 +152,10 @@ export default function MapScreen() {
 
   // Transform backend data to UI format
   const transformedPartners = useMemo(() => {
-    return nearbyUsers.map((user: NearbyUser) => {
+    // First, exclude current user from nearby users (backend should already exclude, but safety check)
+    const otherUsers = nearbyUsers.filter((u: NearbyUser) => u.id !== user?.id);
+    
+    return otherUsers.map((user: NearbyUser) => {
       const teachingLang = user.languages.find(l => l.role === 'teaching');
       const learningLang = user.languages.find(l => l.role === 'learning');
       
@@ -178,7 +200,7 @@ export default function MapScreen() {
         distanceKm: user.distanceKm,
       };
     });
-  }, [nearbyUsers, currentUserLanguages]);
+  }, [nearbyUsers, currentUserLanguages, user?.id]);
 
   // Filter partners by UI filters
   const filteredPartners = useMemo(() => {
@@ -195,21 +217,8 @@ export default function MapScreen() {
     : null;
 
   // Check connection status for selected partner
-  // Note: getConnectionRequests only returns received requests (where user is partner_id)
-  // So we need to check connections differently for sent requests
   const selectedConnectionStatus = useMemo(() => {
     if (!selected || !user?.id) return null;
-    
-    // Check all connections (accepted + pending) where user is either user_id or partner_id
-    // We'll need to query all connections to find sent requests
-    // For now, check received requests first
-    const receivedRequest = receivedRequests.find(
-      (req) => req.user_id === selected.id // Request sent by selected partner to current user
-    );
-    
-    if (receivedRequest && receivedRequest.status === 'pending') {
-      return { status: 'request_received' as const, connection: receivedRequest };
-    }
     
     // Check if already connected (accepted)
     const acceptedConnection = connections.find(
@@ -220,15 +229,68 @@ export default function MapScreen() {
       return { status: 'connected' as const, connection: acceptedConnection };
     }
     
-    // For sent requests, we'd need to query connections where user_id = current user
-    // For now, assume not connected if not in received requests or accepted connections
-    // TODO: Add query for sent pending requests
+    // Check received requests (request sent by selected partner to current user)
+    const receivedRequest = receivedRequests.find(
+      (req) => req.user_id === selected.id
+    );
+    
+    if (receivedRequest && receivedRequest.status === 'pending') {
+      return { status: 'request_received' as const, connection: receivedRequest };
+    }
+    
+    // Check sent requests (request sent by current user to selected partner)
+    const sentRequest = sentRequests.find(
+      (req) => req.partner.id === selected.id
+    );
+    
+    if (sentRequest && sentRequest.status === 'pending') {
+      return { status: 'request_sent' as const, connection: sentRequest };
+    }
+    
+    // Not connected
     return { status: 'not_connected' as const, connection: null };
-  }, [selected, user?.id, connections, receivedRequests]);
+  }, [selected, user?.id, connections, receivedRequests, sentRequests]);
 
   // Transform for markers component
   const markerUsers: NearbyUserMarker[] = useMemo(() => {
-    return filteredPartners.map(partner => {
+    // First, filter and validate partners
+    const validPartners = filteredPartners
+      .filter(partner => {
+        // CRITICAL: Exclude current user from markers (should already be filtered, but safety check)
+        if (partner.id === user?.id) {
+          return false;
+        }
+
+        // Validate that partner has valid coordinates
+        if (!partner.lat || !partner.lng) {
+          console.warn('[MapScreen] Partner missing coordinates:', partner.id, partner.name);
+          return false;
+        }
+        // Validate coordinates are valid numbers
+        if (isNaN(partner.lat) || isNaN(partner.lng)) {
+          console.warn('[MapScreen] Partner has invalid coordinates:', partner.id, partner.name, { lat: partner.lat, lng: partner.lng });
+          return false;
+        }
+        // Validate coordinates are within valid ranges
+        if (partner.lat < -90 || partner.lat > 90 || partner.lng < -180 || partner.lng > 180) {
+          console.warn('[MapScreen] Partner coordinates out of range:', partner.id, partner.name, { lat: partner.lat, lng: partner.lng });
+          return false;
+        }
+        return true;
+      });
+
+    // Remove duplicates by ID
+    const seenIds = new Set<string>();
+    const uniquePartners = validPartners.filter(partner => {
+      if (seenIds.has(partner.id)) {
+        return false;
+      }
+      seenIds.add(partner.id);
+      return true;
+    });
+
+    // Transform to marker format
+    const markers = uniquePartners.map(partner => {
       // Find the original user data to get avatarUrl
       const originalUser = nearbyUsers.find(u => u.id === partner.id);
       return {
@@ -247,7 +309,9 @@ export default function MapScreen() {
         matchScore: partner.matchScore,
       };
     });
-  }, [filteredPartners, nearbyUsers]);
+    
+    return markers;
+  }, [filteredPartners, nearbyUsers, user?.id]);
 
   // Handle user location update
   const handleUserLocationUpdate = useCallback(async (location: { latitude: number; longitude: number }) => {
@@ -419,7 +483,8 @@ export default function MapScreen() {
   const hasActiveFilters =
     filters.maxDistance < 50 ||
     filters.availability !== 'all' ||
-    filters.minMatchScore > 0;
+    filters.minMatchScore > 0 ||
+    (filters.languages && filters.languages.length > 0);
 
   const toggleExpanded = () => {
     const toValue = isExpanded ? 140 : height * 0.55;
@@ -437,17 +502,33 @@ export default function MapScreen() {
     setSelectedPartner(user.id);
   }, []);
 
-  // Show error alert
+  // Track retry attempts for network errors
+  const [retryCount, setRetryCount] = useState(0);
+  const [lastError, setLastError] = useState<Error | null>(null);
+
+  // Show error alert with better messaging
   useEffect(() => {
     if (error) {
+      setLastError(error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      // Don't show alert if it's a network error we're handling
+      if (errorMessage.includes('network') || errorMessage.includes('Network')) {
+        // Network errors are handled by inline error banner
+        return;
+      }
+      
       Alert.alert(
         'Error Loading Map',
-        'Failed to load nearby partners. Please try again.',
+        'Failed to load nearby partners. Please check your connection and try again.',
         [
-          { text: 'Retry', onPress: () => refetch() },
+          { text: 'Retry', onPress: () => { setRetryCount(prev => prev + 1); refetch(); } },
           { text: 'OK', style: 'cancel' },
         ]
       );
+    } else {
+      setLastError(null);
+      setRetryCount(0);
     }
   }, [error, refetch]);
 
@@ -455,12 +536,13 @@ export default function MapScreen() {
   const locationDisplayName = profile?.city || profile?.country || 'Unknown Location';
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
-      {/* Notifications Container */}
-      <NotificationContainer />
-      
-      {/* Map Area */}
-      <View style={styles.mapContainer}>
+    <MapErrorBoundary>
+      <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+        {/* Notifications Container */}
+        <NotificationContainer />
+        
+        {/* Map Area */}
+        <View style={styles.mapContainer}>
         {/* Mapbox Map, Google Maps fallback, or Loading UI */}
         {isMapboxAvailable && userLocation ? (
           <MapboxMap
@@ -512,6 +594,20 @@ export default function MapScreen() {
             <Text style={[styles.loadingText, { color: colors.text.muted }]}>
               Loading map...
             </Text>
+            {!locationPermission && (
+              <View style={styles.locationPermissionPrompt}>
+                <Ionicons name="location-outline" size={24} color={colors.text.muted} />
+                <Text style={[styles.locationPermissionText, { color: colors.text.muted }]}>
+                  Location permission required to find nearby partners
+                </Text>
+                <TouchableOpacity
+                  onPress={handleCenterOnLocation}
+                  style={[styles.locationPermissionButton, { backgroundColor: colors.primary }]}
+                >
+                  <Text style={styles.locationPermissionButtonText}>Enable Location</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -539,6 +635,25 @@ export default function MapScreen() {
           </View>
         )}
 
+        {/* Error Banner - Network Errors */}
+        {error && (error instanceof Error && (error.message.includes('network') || error.message.includes('Network'))) && (
+          <View style={[styles.errorBanner, { backgroundColor: colors.semantic.error, borderColor: colors.semantic.error }]}>
+            <Ionicons name="warning" size={20} color="#FFFFFF" />
+            <Text style={styles.errorBannerText}>
+              Network error. Check your connection.
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setRetryCount(prev => prev + 1);
+                refetch();
+              }}
+              style={styles.errorRetryButton}
+            >
+              <Text style={styles.errorRetryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Loading Overlay */}
         {(isLoading || isGettingLocation) && (
           <View style={[styles.loadingOverlay, { backgroundColor: `${colors.background.primary}CC` }]}>
@@ -546,6 +661,63 @@ export default function MapScreen() {
             <Text style={[styles.loadingText, { color: colors.text.muted }]}>
               {isGettingLocation ? 'Getting your location...' : 'Finding nearby partners...'}
             </Text>
+          </View>
+        )}
+
+        {/* Empty State - No Nearby Users */}
+        {!isLoading && !error && filteredPartners.length === 0 && nearbyUsers.length === 0 && (
+          <View style={[styles.emptyState, { backgroundColor: `${colors.background.secondary}E6` }]}>
+            <Ionicons name="people-outline" size={64} color={colors.text.muted} />
+            <Text style={[styles.emptyStateTitle, { color: colors.text.primary }]}>
+              No Partners Nearby
+            </Text>
+            <Text style={[styles.emptyStateMessage, { color: colors.text.muted }]}>
+              {hasActiveFilters
+                ? 'Try adjusting your filters or expanding your search distance.'
+                : 'There are no language partners nearby. Check back later or expand your search radius.'}
+            </Text>
+            {hasActiveFilters && (
+              <TouchableOpacity
+                onPress={() => {
+                  setFilters({ maxDistance: 50, availability: 'all', minMatchScore: 0, languages: [] });
+                  setShowFilters(false);
+                }}
+                style={[styles.emptyStateButton, { backgroundColor: colors.primary }]}
+              >
+                <Text style={styles.emptyStateButtonText}>Clear Filters</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => refetch()}
+              style={[styles.emptyStateButton, styles.emptyStateButtonSecondary, { borderColor: colors.border.default }]}
+            >
+              <Ionicons name="refresh" size={16} color={colors.text.primary} />
+              <Text style={[styles.emptyStateButtonText, { color: colors.text.primary }]}>
+                Refresh
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Empty State - Filtered Out All Users */}
+        {!isLoading && !error && nearbyUsers.length > 0 && filteredPartners.length === 0 && (
+          <View style={[styles.emptyState, styles.emptyStateSmall, { backgroundColor: `${colors.background.secondary}E6` }]}>
+            <Ionicons name="funnel-outline" size={48} color={colors.text.muted} />
+            <Text style={[styles.emptyStateTitle, styles.emptyStateTitleSmall, { color: colors.text.primary }]}>
+              No Matches with Current Filters
+            </Text>
+            <Text style={[styles.emptyStateMessage, { color: colors.text.muted }]}>
+              We found {nearbyUsers.length} partner{nearbyUsers.length !== 1 ? 's' : ''} nearby, but none match your filters.
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setFilters({ maxDistance: 50, availability: 'all', minMatchScore: 0, languages: [] });
+                setShowFilters(false);
+              }}
+              style={[styles.emptyStateButton, { backgroundColor: colors.primary }]}
+            >
+              <Text style={styles.emptyStateButtonText}>Adjust Filters</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -588,7 +760,8 @@ export default function MapScreen() {
                     <Text style={styles.filterBadgeText}>
                       {(filters.maxDistance < 50 ? 1 : 0) +
                         (filters.availability !== 'all' ? 1 : 0) +
-                        (filters.minMatchScore > 0 ? 1 : 0)}
+                        (filters.minMatchScore > 0 ? 1 : 0) +
+                        (filters.languages && filters.languages.length > 0 ? 1 : 0)}
                     </Text>
                   </View>
                 )}
@@ -716,12 +889,9 @@ export default function MapScreen() {
                         if (!user?.id) return;
                         try {
                           await sendConnectionRequestMutation.mutateAsync(selected.id);
-                          Alert.alert(
-                            'Connection Request Sent!',
-                            'You will be notified when they accept your request.',
-                            [{ text: 'OK' }]
-                          );
+                          // Alert is now shown in the hook's onSuccess callback
                         } catch (error) {
+                          // Error handling is done in the hook's onError callback
                           console.error('Failed to send connection request:', error);
                         }
                       }}
@@ -735,12 +905,25 @@ export default function MapScreen() {
             </View>
           ) : (
             <View style={styles.headerInfo}>
-              <Text style={[styles.partnerCount, { color: colors.text.primary }]}>
-                {filteredPartners.length} partners nearby
-              </Text>
-              <Text style={[styles.partnerHint, { color: colors.text.muted }]}>
-                Tap markers to see details
-              </Text>
+              {filteredPartners.length > 0 ? (
+                <>
+                  <Text style={[styles.partnerCount, { color: colors.text.primary }]}>
+                    {filteredPartners.length} partner{filteredPartners.length !== 1 ? 's' : ''} nearby
+                  </Text>
+                  {nearbyUsers.length > filteredPartners.length && (
+                    <Text style={[styles.partnerHint, { color: colors.text.muted }]}>
+                      {nearbyUsers.length - filteredPartners.length} hidden by filters
+                    </Text>
+                  )}
+                  <Text style={[styles.partnerHint, { color: colors.text.muted }]}>
+                    Tap markers to see details
+                  </Text>
+                </>
+              ) : (
+                <Text style={[styles.partnerHint, { color: colors.text.muted }]}>
+                  No partners match your filters
+                </Text>
+              )}
             </View>
           )}
 
@@ -882,6 +1065,142 @@ export default function MapScreen() {
                 </View>
               </View>
 
+              {/* Language Filter */}
+              <View style={styles.filterSection}>
+                <View style={styles.filterLabelRow}>
+                  <Text style={[styles.filterLabel, { color: colors.text.primary }]}>
+                    Languages
+                  </Text>
+                  {filters.languages && filters.languages.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() =>
+                        setFilters((prev) => ({ ...prev, languages: [] }))
+                      }
+                    >
+                      <Text style={[styles.clearText, { color: colors.primary }]}>
+                        Clear
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <Text style={[styles.filterHint, { color: colors.text.muted }]}>
+                  Filter by languages you want to learn or teach
+                </Text>
+                <View style={styles.languageChipsContainer}>
+                  {currentUserLanguages.learning.length > 0 && (
+                    <>
+                      <Text style={[styles.languageSectionLabel, { color: colors.text.muted }]}>
+                        I'm Learning:
+                      </Text>
+                      <View style={styles.languageChipsRow}>
+                        {currentUserLanguages.learning.map((lang) => {
+                          const isSelected = filters.languages?.includes(lang) || false;
+                          return (
+                            <TouchableOpacity
+                              key={`learning-${lang}`}
+                              style={[
+                                styles.languageChip,
+                                {
+                                  backgroundColor: isSelected
+                                    ? colors.primary
+                                    : colors.background.tertiary,
+                                  borderColor: isSelected ? colors.primary : colors.border.default,
+                                },
+                              ]}
+                              onPress={() => {
+                                setFilters((prev) => {
+                                  const currentLangs = prev.languages || [];
+                                  if (currentLangs.includes(lang)) {
+                                    return {
+                                      ...prev,
+                                      languages: currentLangs.filter((l) => l !== lang),
+                                    };
+                                  } else {
+                                    return {
+                                      ...prev,
+                                      languages: [...currentLangs, lang],
+                                    };
+                                  }
+                                });
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.languageChipText,
+                                  {
+                                    color: isSelected ? '#FFFFFF' : colors.text.primary,
+                                  },
+                                ]}
+                              >
+                                {getLanguageFlag(lang)} {lang}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </>
+                  )}
+                  {currentUserLanguages.teaching.length > 0 && (
+                    <>
+                      <Text style={[styles.languageSectionLabel, { color: colors.text.muted }]}>
+                        I'm Teaching:
+                      </Text>
+                      <View style={styles.languageChipsRow}>
+                        {currentUserLanguages.teaching.map((lang) => {
+                          const isSelected = filters.languages?.includes(lang) || false;
+                          return (
+                            <TouchableOpacity
+                              key={`teaching-${lang}`}
+                              style={[
+                                styles.languageChip,
+                                {
+                                  backgroundColor: isSelected
+                                    ? colors.primary
+                                    : colors.background.tertiary,
+                                  borderColor: isSelected ? colors.primary : colors.border.default,
+                                },
+                              ]}
+                              onPress={() => {
+                                setFilters((prev) => {
+                                  const currentLangs = prev.languages || [];
+                                  if (currentLangs.includes(lang)) {
+                                    return {
+                                      ...prev,
+                                      languages: currentLangs.filter((l) => l !== lang),
+                                    };
+                                  } else {
+                                    return {
+                                      ...prev,
+                                      languages: [...currentLangs, lang],
+                                    };
+                                  }
+                                });
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.languageChipText,
+                                  {
+                                    color: isSelected ? '#FFFFFF' : colors.text.primary,
+                                  },
+                                ]}
+                              >
+                                {getLanguageFlag(lang)} {lang}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </>
+                  )}
+                  {(!currentUserLanguages.learning.length && !currentUserLanguages.teaching.length) && (
+                    <Text style={[styles.filterHint, { color: colors.text.muted, fontStyle: 'italic' }]}>
+                      Add languages to your profile to filter by them
+                    </Text>
+                  )}
+                </View>
+              </View>
+
               {/* Match Score Filter */}
               <View style={styles.filterSection}>
                 <View style={styles.filterLabelRow}>
@@ -913,7 +1232,7 @@ export default function MapScreen() {
               <TouchableOpacity
                 style={[styles.resetButton, { backgroundColor: colors.background.tertiary }]}
                 onPress={() =>
-                  setFilters({ maxDistance: 50, availability: 'all', minMatchScore: 0 })
+                  setFilters({ maxDistance: 50, availability: 'all', minMatchScore: 0, languages: [] })
                 }
               >
                 <Text style={[styles.resetText, { color: colors.text.primary }]}>
@@ -933,8 +1252,9 @@ export default function MapScreen() {
         </View>
       </Modal>
 
-      {/* Match Found Popup is now handled globally via GlobalMatchFoundPopup */}
-    </View>
+        {/* Match Found Popup is now handled globally via GlobalMatchFoundPopup */}
+      </View>
+    </MapErrorBoundary>
   );
 }
 
@@ -1328,5 +1648,150 @@ const styles = StyleSheet.create({
   fallbackMarkerDistance: {
     fontSize: 10,
     marginTop: 2,
+  },
+  errorBanner: {
+    position: 'absolute',
+    top: 80,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  errorBannerText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  errorRetryButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF20',
+  },
+  errorRetryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyState: {
+    position: 'absolute',
+    top: '30%',
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+    padding: 24,
+    borderRadius: 24,
+    gap: 12,
+    zIndex: 100,
+  },
+  emptyStateSmall: {
+    top: '40%',
+    padding: 20,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  emptyStateTitleSmall: {
+    fontSize: 18,
+  },
+  emptyStateMessage: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  emptyStateButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  emptyStateButtonSecondary: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  emptyStateButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  locationPermissionPrompt: {
+    marginTop: 32,
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 32,
+  },
+  locationPermissionText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  locationPermissionButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  locationPermissionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  languageChipsContainer: {
+    marginTop: 12,
+    gap: 12,
+  },
+  languageSectionLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  languageChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
+  languageChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  languageChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  clearText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  filterHint: {
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 8,
   },
 });

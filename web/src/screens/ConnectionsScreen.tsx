@@ -1,20 +1,20 @@
 import { useState } from 'react';
 import { Search, UserPlus } from 'lucide-react';
 import { motion } from 'motion/react';
-import { mockPartners } from '../data/mockData';
+import { useConnections } from '../hooks/useConnections';
+import { useAuth } from '../providers/AuthProvider';
 
 interface ConnectionsScreenProps {
   onPartnerClick: (partnerId: string) => void;
 }
 
 export function ConnectionsScreen({ onPartnerClick }: ConnectionsScreenProps) {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'connections' | 'requests' | 'suggested'>('connections');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Mock data
-  const connections = mockPartners.slice(0, 4);
-  const requests = mockPartners.slice(4, 6);
-  const suggested = mockPartners.slice(2, 5);
+  // Get real connections data
+  const { connections = [], requests = [], suggested = [], isLoading } = useConnections(user?.id);
 
   const tabs = [
     { id: 'connections', label: 'Connections', count: connections.length },

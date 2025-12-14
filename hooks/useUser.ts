@@ -43,9 +43,29 @@ export function useProfile() {
 export function useUserProfile(userId: string | undefined) {
   return useQuery({
     queryKey: userKeys.profile(userId),
-    queryFn: () => (userId ? userService.getProfileWithLanguages(userId) : null),
+    queryFn: async () => {
+      if (!userId) {
+        console.warn('[useUserProfile] No userId provided');
+        return null;
+      }
+      console.log('[useUserProfile] Fetching profile for userId:', userId);
+      try {
+        const profile = await userService.getProfileWithLanguages(userId);
+        if (!profile) {
+          console.warn('[useUserProfile] Profile not found for userId:', userId);
+        }
+        return profile;
+      } catch (error) {
+        console.error('[useUserProfile] Error fetching profile:', {
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    },
     enabled: !!userId,
     staleTime: 5 * 60 * 1000,
+    retry: 1, // Retry once on failure
   });
 }
 

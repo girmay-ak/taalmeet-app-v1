@@ -61,8 +61,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // Prevent duplicate fetches for the same session
       if (hasFetchedProfileForSession.current === session.user.id) {
-        // Profile already fetched for this session, but ensure it's set
-        // This handles cases where component remounts but profile was already fetched
+        // Profile already fetched for this session
+        // Set profileLoading to false to ensure loading state is correct
+        if (isMounted.current && profile) {
+          setProfileLoading(false);
+        }
         return;
       }
 
@@ -75,9 +78,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       try {
         const userProfile = await profileService.getCurrentUserProfile();
         
-        // Always update profile state if we got a result (even if unmounted check fails)
-        // This ensures the profile is available for components
+        if (isMounted.current) {
         setProfile(userProfile);
+          setProfileLoading(false);
+        }
         
         // Log profile data when successfully loaded (only once per session)
         if (userProfile) {
@@ -104,9 +108,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           error: error?.message || 'Unknown error',
           action: 'profile_fetch_error',
         });
-        setProfile(null);
-      } finally {
         if (isMounted.current) {
+          setProfile(null);
           setProfileLoading(false);
         }
       }

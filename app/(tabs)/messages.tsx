@@ -38,31 +38,9 @@ export default function MessagesScreen() {
 
   // Handle new chat button press
   const handleNewChat = async () => {
-    // Option 1: Navigate to discover screen to select a user
-    // router.push('/(tabs)');
-    
-    // Option 2: For development - create conversation with first available user
-    // This is a temporary solution until we have a proper user selection screen
-    if (discoverData?.activeUsers && discoverData.activeUsers.length > 0) {
-      const firstUser = discoverData.activeUsers[0];
-      try {
-        const conversationId = await createConversationMutation.mutateAsync(firstUser.id);
-        router.push(`/chat/${conversationId}`);
-      } catch (error) {
-        // Error is handled by the hook
-      }
-    } else if (discoverData?.recommendedUsers && discoverData.recommendedUsers.length > 0) {
-      const firstUser = discoverData.recommendedUsers[0];
-      try {
-        const conversationId = await createConversationMutation.mutateAsync(firstUser.id);
-        router.push(`/chat/${conversationId}`);
-      } catch (error) {
-        // Error is handled by the hook
-      }
-    } else {
-      // No users available, navigate to discover screen
-      router.push('/(tabs)');
-    }
+    // Navigate to discover/home screen to select a user
+    // User can then click on a user profile to start a conversation
+    router.push('/(tabs)');
   };
 
   // Format timestamp
@@ -102,15 +80,6 @@ export default function MessagesScreen() {
     return true;
   });
 
-  // Debug logging (after filteredConversations is calculated)
-  console.log('[MessagesScreen] Render state:', {
-    isLoading,
-    isError,
-    error: error ? JSON.stringify(error, null, 2) : null,
-    conversationsCount: conversations?.length || 0,
-    conversations,
-    filteredCount: filteredConversations?.length || 0,
-  });
 
   const renderConversation = (conversation: typeof conversations[0]) => (
     <TouchableOpacity
@@ -120,7 +89,10 @@ export default function MessagesScreen() {
         { borderBottomColor: colors.border.default },
       ]}
       activeOpacity={0.7}
-      onPress={() => router.push(`/chat/${conversation.id}`)}
+      onPress={() => {
+        // Navigate to chat - conversation list will auto-refresh on return
+        router.push(`/chat/${conversation.id}`);
+      }}
     >
       {/* Avatar */}
       <View style={styles.avatarContainer}>

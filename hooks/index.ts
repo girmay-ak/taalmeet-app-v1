@@ -62,3 +62,6 @@ export * from './useTranslation';
 
 // Groups Hooks
 export * from './useGroups';
+
+// Map Performance Hooks
+export * from './useMapPerformance';

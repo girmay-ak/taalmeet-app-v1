@@ -222,6 +222,10 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 export async function getExpoPushToken(): Promise<string | null> {
   try {
     if (!Device.isDevice) {
+      // Silently return null in development for simulators/emulators
+      if (__DEV__) {
+        return null;
+      }
       console.warn('Push notifications only work on physical devices');
       return null;
     }
@@ -242,13 +246,25 @@ export async function getExpoPushToken(): Promise<string | null> {
     const isValidProjectId = projectId && uuidRegex.test(projectId);
 
     if (!isValidProjectId) {
-      // For development, try without projectId (legacy method)
+      // In development, skip push token registration if no projectId
+      // This prevents the deprecation warnings from cluttering logs
+      if (__DEV__) {
+        // Only log once per session to reduce noise
+        if (!(global as any).__pushTokenWarningLogged) {
+          console.log('Push notifications: Skipping token registration in development (no EAS projectId configured)');
+          console.log('To enable push notifications: Run "eas init" or add projectId to app.json extra.eas.projectId');
+          (global as any).__pushTokenWarningLogged = true;
+        }
+        return null;
+      }
+
+      // For production or when explicitly needed, try without projectId (legacy method)
       // This works in Expo Go and development builds
       try {
         const tokenData = await Notifications.getExpoPushTokenAsync();
         return tokenData.data;
       } catch (legacyError) {
-        console.warn('Project ID not found or invalid. Push notifications require a valid EAS project ID for production. For development, you can use Expo Go or set up EAS project.');
+        console.warn('Project ID not found or invalid. Push notifications require a valid EAS project ID for production.');
         console.warn('To set up EAS project: Run "eas init" or add a valid projectId to app.json extra.eas.projectId');
         return null;
       }
@@ -260,7 +276,10 @@ export async function getExpoPushToken(): Promise<string | null> {
 
     return tokenData.data;
   } catch (error) {
-    console.error('Error getting Expo push token:', error);
+    // Only log errors in production or if it's not the expected deprecation warning
+    if (!__DEV__ || !(error as any)?.message?.includes('projectId')) {
+      console.error('Error getting Expo push token:', error);
+    }
     return null;
   }
 }
@@ -690,5 +709,316 @@ export async function sendAchievementUnlockedNotification(
       type: 'achievement_unlocked',
     }
   );
+}
+
+// ============================================================================
+// IN-APP NOTIFICATIONS
+// ============================================================================
+
+export interface InAppNotification {
+  id: string;
+  type: 'match' | 'message' | 'connection' | 'connection_accepted' | 'achievement' | 'session' | 'reminder';
+  title: string;
+  message: string;
+  time: string;
+  timestamp: string;
+  read: boolean;
+  avatar?: string;
+  icon?: 'heart' | 'message' | 'user' | 'calendar' | 'star' | 'sparkles';
+  relatedId?: string;
+}
+
+/**
+ * Get all in-app notifications for a user
+ * Aggregates notifications from multiple sources
+ */
+export async function getNotifications(userId: string): Promise<InAppNotification[]> {
+  const notifications: InAppNotification[] = [];
+
+  try {
+    // 1. Get pending connection requests (where user is partner_id)
+    const { data: connectionRequests, error: connError } = await supabase
+      .from('connections')
+      .select(`
+        id,
+        user_id,
+        match_score,
+        created_at,
+        profiles!connections_user_id_fkey (
+          display_name,
+          avatar_url
+        )
+      `)
+      .eq('partner_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (!connError && connectionRequests) {
+      connectionRequests.forEach((conn: any) => {
+        const profile = conn.profiles;
+        notifications.push({
+          id: `connection_${conn.id}`,
+          type: 'connection',
+          title: 'Connection Request',
+          message: `${profile?.display_name || 'Someone'} wants to connect with you`,
+          time: formatTimeAgo(conn.created_at),
+          timestamp: conn.created_at,
+          read: false, // Connection requests are always unread
+          avatar: profile?.avatar_url || undefined,
+          icon: 'user',
+          relatedId: conn.id,
+        });
+      });
+    }
+
+    // 2. Get recently accepted connections (where user is user_id or partner_id)
+    const { data: acceptedConnections, error: acceptedError } = await supabase
+      .from('connections')
+      .select(`
+        id,
+        user_id,
+        partner_id,
+        match_score,
+        accepted_at,
+        profiles!connections_user_id_fkey (
+          display_name,
+          avatar_url
+        ),
+        partner:profiles!connections_partner_id_fkey (
+          display_name,
+          avatar_url
+        )
+      `)
+      .or(`user_id.eq.${userId},partner_id.eq.${userId}`)
+      .eq('status', 'accepted')
+      .not('accepted_at', 'is', null)
+      .order('accepted_at', { ascending: false })
+      .limit(10);
+
+    if (!acceptedError && acceptedConnections) {
+      acceptedConnections.forEach((conn: any) => {
+        const otherUser = conn.user_id === userId ? conn.partner : conn.profiles;
+        if (otherUser) {
+          notifications.push({
+            id: `connection_accepted_${conn.id}`,
+            type: 'connection_accepted',
+            title: 'Connection Accepted',
+            message: `${otherUser?.display_name || 'Someone'} accepted your connection request`,
+            time: formatTimeAgo(conn.accepted_at),
+            timestamp: conn.accepted_at,
+            read: false,
+            avatar: otherUser?.avatar_url || undefined,
+            icon: 'heart',
+            relatedId: conn.id,
+          });
+        }
+      });
+    }
+
+    // 3. Get unread messages (grouped by conversation)
+    const { data: unreadMessages, error: messagesError } = await supabase
+      .from('messages')
+      .select(`
+        id,
+        sender_id,
+        content,
+        created_at,
+        profiles!messages_sender_id_fkey (
+          display_name,
+          avatar_url
+        )
+      `)
+      .eq('receiver_id', userId)
+      .eq('is_read', false)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (!messagesError && unreadMessages) {
+      // Group by sender to avoid duplicate notifications
+      const messageMap = new Map<string, any>();
+      unreadMessages.forEach((msg: any) => {
+        if (!messageMap.has(msg.sender_id)) {
+          messageMap.set(msg.sender_id, msg);
+        }
+      });
+
+      messageMap.forEach((msg: any) => {
+        const profile = msg.profiles;
+        notifications.push({
+          id: `message_${msg.id}`,
+          type: 'message',
+          title: 'New Message',
+          message: `${profile?.display_name || 'Someone'}: "${msg.content.substring(0, 50)}${msg.content.length > 50 ? '...' : ''}"`,
+          time: formatTimeAgo(msg.created_at),
+          timestamp: msg.created_at,
+          read: false,
+          avatar: profile?.avatar_url || undefined,
+          icon: 'message',
+          relatedId: msg.id,
+        });
+      });
+    }
+
+    // 4. Get recent matches (if matches table exists)
+    try {
+      const { data: matches, error: matchesError } = await supabase
+        .from('matches')
+        .select(`
+          id,
+          user_id_1,
+          user_id_2,
+          matched_at,
+          created_at
+        `)
+        .or(`user_id_1.eq.${userId},user_id_2.eq.${userId}`)
+        .eq('status', 'accepted')
+        .not('matched_at', 'is', null)
+        .order('matched_at', { ascending: false })
+        .limit(10);
+
+      if (!matchesError && matches && matches.length > 0) {
+        // Fetch all profiles for matches in parallel
+        const profilePromises = matches.map(async (match: any) => {
+          const otherUserId = match.user_id_1 === userId ? match.user_id_2 : match.user_id_1;
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('display_name, avatar_url')
+            .eq('id', otherUserId)
+            .single();
+          
+          if (profile) {
+            return {
+              id: `match_${match.id}`,
+              type: 'match' as const,
+              title: 'New Match!',
+              message: `You matched with ${profile.display_name || 'Someone'}`,
+              time: formatTimeAgo(match.matched_at || match.created_at),
+              timestamp: match.matched_at || match.created_at,
+              read: false,
+              avatar: profile.avatar_url || undefined,
+              icon: 'heart' as const,
+              relatedId: match.id,
+            };
+          }
+          return null;
+        });
+
+        const matchNotifications = await Promise.all(profilePromises);
+        matchNotifications.forEach((notif) => {
+          if (notif) {
+            notifications.push(notif);
+          }
+        });
+      }
+    } catch (error) {
+      // Matches table might not exist, ignore
+      console.log('Matches table not available');
+    }
+
+    // Sort by timestamp (newest first)
+    notifications.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return notifications;
+  } catch (error) {
+    console.error('[notificationsService] Error fetching notifications:', error);
+    return [];
+  }
+}
+
+/**
+ * Mark notification as read
+ * For connection requests, this marks the connection as viewed
+ * For messages, this marks the message as read
+ */
+export async function markNotificationAsRead(notificationId: string, userId: string): Promise<void> {
+  try {
+    if (notificationId.startsWith('connection_')) {
+      const connectionId = notificationId.replace('connection_', '');
+      // Connection requests are marked as read when viewed
+      // We could add a viewed_at field to connections table if needed
+      return;
+    } else if (notificationId.startsWith('message_')) {
+      const messageId = notificationId.replace('message_', '');
+      await supabase
+        .from('messages')
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq('id', messageId)
+        .eq('receiver_id', userId);
+    } else if (notificationId.startsWith('connection_accepted_')) {
+      // Connection accepted notifications are informational, no action needed
+      return;
+    } else if (notificationId.startsWith('match_')) {
+      // Match notifications are informational, no action needed
+      return;
+    }
+  } catch (error) {
+    console.error('[notificationsService] Error marking notification as read:', error);
+    throw error;
+  }
+}
+
+/**
+ * Mark all notifications as read
+ */
+export async function markAllNotificationsAsRead(userId: string): Promise<void> {
+  try {
+    // Mark all unread messages as read
+    await supabase
+      .from('messages')
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('receiver_id', userId)
+      .eq('is_read', false);
+
+    // Connection requests and other notifications are informational
+    // They don't have a read status in the database
+  } catch (error) {
+    console.error('[notificationsService] Error marking all notifications as read:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete notification
+ * For connection requests, this could reject the connection
+ * For messages, this just removes from view (message still exists)
+ */
+export async function deleteNotification(notificationId: string, userId: string): Promise<void> {
+  try {
+    if (notificationId.startsWith('connection_')) {
+      const connectionId = notificationId.replace('connection_', '');
+      // Optionally reject the connection request
+      // await supabase
+      //   .from('connections')
+      //   .update({ status: 'rejected' })
+      //   .eq('id', connectionId)
+      //   .eq('partner_id', userId);
+      return;
+    } else if (notificationId.startsWith('message_')) {
+      // Messages can't be deleted, just marked as read
+      await markNotificationAsRead(notificationId, userId);
+    }
+    // Other notification types are informational and don't need deletion
+  } catch (error) {
+    console.error('[notificationsService] Error deleting notification:', error);
+    throw error;
+  }
+}
+
+/**
+ * Format timestamp as time ago (e.g., "2 min ago", "1 hour ago")
+ */
+function formatTimeAgo(timestamp: string): string {
+  const now = new Date();
+  const time = new Date(timestamp);
+  const diffMs = now.getTime() - time.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+  return time.toLocaleDateString();
 }
 

@@ -1,15 +1,40 @@
 import { useEffect } from 'react';
 import { TaalMeetLogo } from '../components/TaalMeetLogo';
+import { useAuthContext } from '../hooks/useAuth';
 
 interface SplashScreenProps {
   onComplete: () => void;
+  onNavigateToLogin?: () => void;
+  onNavigateToHome?: () => void;
 }
 
-export function SplashScreen({ onComplete }: SplashScreenProps) {
+export function SplashScreen({ 
+  onComplete, 
+  onNavigateToLogin,
+  onNavigateToHome 
+}: SplashScreenProps) {
+  const { user, loading } = useAuthContext();
+
   useEffect(() => {
-    const timer = setTimeout(onComplete, 2000);
-    return () => clearTimeout(timer);
-  }, [onComplete]);
+    // Wait for auth state to be determined
+    if (!loading) {
+      // Small delay for smooth transition
+      const timer = setTimeout(() => {
+        // If user is authenticated, navigate to home
+        if (user && onNavigateToHome) {
+          onNavigateToHome();
+        } 
+        // If user is not authenticated, navigate to login
+        else if (!user && onNavigateToLogin) {
+          onNavigateToLogin();
+        }
+        // Complete splash screen
+        onComplete();
+      }, 1500); // Show splash for at least 1.5 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [loading, user, onComplete, onNavigateToLogin, onNavigateToHome]);
 
   return (
     <div className="flex flex-col items-center justify-center h-full bg-gradient-to-br from-[#0F0F0F] via-[#1A1A1A] to-[#0F0F0F] relative overflow-hidden">
@@ -56,6 +81,9 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             />
           ))}
         </div>
+        {loading && (
+          <p className="text-sm text-[#9CA3AF] mt-4">Checking authentication...</p>
+        )}
       </div>
 
       {/* Version */}

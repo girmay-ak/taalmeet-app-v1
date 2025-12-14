@@ -3,7 +3,7 @@
  * Renders user markers on the map with avatars and smooth animations
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { View, Image, StyleSheet, Animated } from 'react-native';
 import Mapbox, { PointAnnotation } from '@rnmapbox/maps';
 import { useTheme } from '@/lib/theme/ThemeProvider';
@@ -58,6 +58,21 @@ export function NearbyUserMarkers({
   const { colors } = useTheme();
   const scaleAnims = useRef<Map<string, Animated.Value>>(new Map());
   const pulseAnims = useRef<Map<string, Animated.Value>>(new Map());
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[NearbyUserMarkers] Rendering markers:', {
+      totalUsers: users.length,
+      usersWithValidCoords: users.filter(u => u.lat && u.lng && !isNaN(u.lat) && !isNaN(u.lng)).length,
+      users: users.map(u => ({
+        id: u.id,
+        name: u.displayName,
+        lat: u.lat,
+        lng: u.lng,
+        hasValidCoords: !!(u.lat && u.lng && !isNaN(u.lat) && !isNaN(u.lng))
+      }))
+    });
+  }, [users]);
 
   // Initialize scale and pulse animations for each user
   useEffect(() => {
@@ -117,19 +132,81 @@ export function NearbyUserMarkers({
     return teachingLang ? getLanguageFlag(teachingLang.language) : '🌍';
   };
 
+  // Remove duplicate users by ID to prevent duplicate markers
+  const uniqueUsers = useMemo(() => {
+    const seen = new Set<string>();
+    return users.filter(user => {
+      if (seen.has(user.id)) {
+        console.warn('[NearbyUserMarkers] Duplicate user detected, skipping:', user.id, user.displayName);
+        return false;
+      }
+      seen.add(user.id);
+      return true;
+    });
+  }, [users]);
+
   return (
     <>
-      {users.map((user) => {
-        const scaleAnim = scaleAnims.current.get(user.id) || new Animated.Value(1);
-        const isOnline = user.isOnline ?? false;
+      {uniqueUsers
+        .filter(user => {
+          // Validate coordinates before rendering
+          if (!user.lat || !user.lng) {
+            console.warn('[NearbyUserMarkers] User missing coordinates:', user.id, user.displayName);
+            return false;
+          }
+          if (isNaN(user.lat) || isNaN(user.lng)) {
+            console.warn('[NearbyUserMarkers] User has invalid coordinates:', user.id, user.displayName);
+            return false;
+          }
+          return true;
+        })
+        .map((user, index) => {
+          const scaleAnim = scaleAnims.current.get(user.id) || new Animated.Value(1);
+          const isOnline = user.isOnline ?? false;
 
-        return (
-          <PointAnnotation
-            key={user.id}
-            id={user.id}
-            coordinate={[user.lng, user.lat]}
-            onSelected={() => handleMarkerPress(user)}
-          >
+          // Ensure coordinates are valid numbers
+          const lat = typeof user.lat === 'number' ? user.lat : parseFloat(String(user.lat));
+          const lng = typeof user.lng === 'number' ? user.lng : parseFloat(String(user.lng));
+
+          if (isNaN(lat) || isNaN(lng)) {
+            console.warn('[NearbyUserMarkers] Invalid coordinate conversion:', user.id, { lat: user.lat, lng: user.lng });
+            return null;
+          }
+
+          // Check if there are other markers with very close coordinates (within ~10 meters)
+          const hasOverlappingMarkers = uniqueUsers.some((otherUser, otherIndex) => {
+            if (otherIndex === index || otherUser.id === user.id) return false;
+            const otherLat = typeof otherUser.lat === 'number' ? otherUser.lat : parseFloat(String(otherUser.lat));
+            const otherLng = typeof otherUser.lng === 'number' ? otherUser.lng : parseFloat(String(otherUser.lng));
+            if (isNaN(otherLat) || isNaN(otherLng)) return false;
+            const latDiff = Math.abs(lat - otherLat);
+            const lngDiff = Math.abs(lng - otherLng);
+            // If coordinates are within ~0.0001 degrees (~10 meters), they're overlapping
+            return latDiff < 0.0001 && lngDiff < 0.0001;
+          });
+
+          let finalLat = lat;
+          let finalLng = lng;
+          
+          // Only apply offset if markers are overlapping
+          if (hasOverlappingMarkers) {
+            // Use larger offset (~5-10 meters) with spiral pattern to spread markers out
+            const offsetDistance = 0.00008 * ((index % 6) + 1); // About 8 meters per step, max 6 markers
+            const angle = (index * 60) * (Math.PI / 180); // 60 degrees between markers (hexagonal spiral)
+            finalLat = lat + (offsetDistance * Math.cos(angle));
+            finalLng = lng + (offsetDistance * Math.sin(angle));
+          }
+
+          // Ensure unique ID for each marker
+          const markerId = `marker-${user.id}`;
+
+          return (
+            <PointAnnotation
+              key={markerId}
+              id={markerId}
+              coordinate={[finalLng, finalLat]}
+              onSelected={() => handleMarkerPress(user)}
+            >
             <Animated.View
               style={[
                 styles.markerContainer,
@@ -244,7 +321,9 @@ export function NearbyUserMarkers({
             </Animated.View>
           </PointAnnotation>
         );
-      })}
+      })
+      .filter((marker) => marker !== null) // Remove any null entries from invalid coordinates
+    }
     </>
   );
 }

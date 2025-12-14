@@ -18,7 +18,7 @@ import {
   parseSupabaseError,
   ValidationError,
 } from '@/utils/errors';
-import { authLogger } from '@/utils/logger';
+import { authLogger, logger } from '@/utils/logger';
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 
 // ============================================================================
@@ -70,7 +70,7 @@ export async function signIn(input: SignInInput): Promise<AuthResponse> {
   authLogger.signIn(email, true);
   
   if (data.user) {
-    authLogger.info('AUTH', 'User signed in successfully', {
+    logger.info('AUTH', 'User signed in successfully', {
       userId: data.user.id,
       email: data.user.email,
       action: 'sign_in_success',

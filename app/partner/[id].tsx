@@ -3,7 +3,7 @@
  * Shows detailed profile of a language partner
  */
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -28,8 +28,32 @@ export default function PartnerProfileScreen() {
   const { colors } = useTheme();
   const [isLiked, setIsLiked] = useState(false);
 
+  // Log partnerId for debugging
+  React.useEffect(() => {
+    console.log('[PartnerProfileScreen] Component mounted/updated:', {
+      partnerId,
+      partnerIdType: typeof partnerId,
+      partnerIdLength: partnerId?.length,
+      isUndefined: partnerId === undefined,
+      isNull: partnerId === null,
+      isEmpty: partnerId === '',
+    });
+  }, [partnerId]);
+
   // Fetch partner profile from backend
-  const { data: partnerProfile, isLoading, error } = useUserProfile(partnerId);
+  const { data: partnerProfile, isLoading, error, isError, status } = useUserProfile(partnerId);
+  
+  // Log query state
+  React.useEffect(() => {
+    console.log('[PartnerProfileScreen] Query state:', {
+      partnerId,
+      isLoading,
+      isError,
+      status,
+      hasData: !!partnerProfile,
+      error: error ? (error instanceof Error ? error.message : String(error)) : null,
+    });
+  }, [partnerId, isLoading, isError, status, partnerProfile, error]);
   const { data: availability } = useAvailability(partnerId);
   const createConversationMutation = useCreateConversation();
 
@@ -45,8 +69,40 @@ export default function PartnerProfileScreen() {
     );
   }
 
-  // Show error state
-  if (error || !partnerProfile) {
+  // Show error state - only show if there's an actual error OR if query completed but no profile found
+  if (isError || (!isLoading && !partnerProfile)) {
+    // Better error extraction from React Query
+    let errorMessage = null;
+    if (error) {
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && 'message' in error) {
+        errorMessage = String(error.message);
+      } else {
+        errorMessage = String(error);
+      }
+    } else if (!partnerProfile && !isLoading) {
+      // No error object but profile not found - this is expected for missing profiles
+      errorMessage = 'Profile not found';
+    }
+    
+    // Only log as error if there's an actual error, otherwise log as info
+    const logLevel = isError ? 'error' : 'log';
+    const logMessage = isError 
+      ? '[PartnerProfileScreen] Error loading profile:'
+      : '[PartnerProfileScreen] Profile not found:';
+    
+    console[logLevel](logMessage, {
+      partnerId,
+      error: errorMessage,
+      errorObject: error,
+      errorType: typeof error,
+      hasProfile: !!partnerProfile,
+      isLoading,
+      isError,
+      status,
+    });
+
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background.primary }]} edges={['top']}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
@@ -55,8 +111,15 @@ export default function PartnerProfileScreen() {
             Profile not found
           </Text>
           <Text style={{ color: colors.text.muted, marginTop: 8, textAlign: 'center' }}>
-            This user profile could not be loaded.
+            {isError 
+              ? 'There was an error loading this profile. Please try again later.'
+              : 'This user profile does not exist or has been removed.'}
           </Text>
+          {errorMessage && (
+            <Text style={{ color: colors.text.muted, marginTop: 8, textAlign: 'center', fontSize: 12 }}>
+              {errorMessage}
+            </Text>
+          )}
           <TouchableOpacity
             style={{ marginTop: 24, padding: 12, backgroundColor: colors.primary, borderRadius: 12 }}
             onPress={() => router.back()}
@@ -159,7 +222,7 @@ export default function PartnerProfileScreen() {
           {/* Name & Badges */}
           <View style={styles.nameRow}>
             <Text style={[styles.name, { color: colors.text.primary }]}>
-              {partnerProfile.display_name}
+              {partnerProfile.full_name || partnerProfile.display_name || 'Unknown User'}
             </Text>
           </View>
 

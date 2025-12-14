@@ -17,6 +17,7 @@ export const connectionKeys = {
   all: ['connections'] as const,
   list: (userId: string) => [...connectionKeys.all, 'list', userId] as const,
   requests: (userId: string) => [...connectionKeys.all, 'requests', userId] as const,
+  sentRequests: (userId: string) => [...connectionKeys.all, 'sent-requests', userId] as const,
   suggested: (userId: string) => [...connectionKeys.all, 'suggested', userId] as const,
 };
 
@@ -100,6 +101,21 @@ export function useSuggestedConnections(userId: string | undefined) {
   });
 }
 
+/**
+ * Get sent pending requests (requests sent by current user)
+ */
+export function useSentConnectionRequests(userId: string | undefined) {
+  return useQuery({
+    queryKey: connectionKeys.sentRequests(userId || ''),
+    queryFn: async () => {
+      if (!userId) return [];
+      return connectionsService.getSentConnectionRequests(userId);
+    },
+    enabled: !!userId,
+    staleTime: 1 * 60 * 1000, // 1 minute
+  });
+}
+
 // ============================================================================
 // MUTATIONS
 // ============================================================================
@@ -123,10 +139,24 @@ export function useSendConnectionRequest() {
       if (user?.id) {
         queryClient.invalidateQueries({ queryKey: connectionKeys.suggested(user.id) });
         queryClient.invalidateQueries({ queryKey: connectionKeys.requests(user.id) });
+        queryClient.invalidateQueries({ queryKey: connectionKeys.sentRequests(user.id) });
         queryClient.invalidateQueries({ queryKey: connectionKeys.list(user.id) });
       }
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      // Check if it's the "already exists" error
+      const errorMessage = error?.message || '';
+      if (errorMessage.includes('already exists')) {
+        // Silently refresh queries to update UI with correct state
+        if (user?.id) {
+          queryClient.invalidateQueries({ queryKey: connectionKeys.sentRequests(user.id) });
+          queryClient.invalidateQueries({ queryKey: connectionKeys.list(user.id) });
+        }
+        // Don't show error alert for "already exists" - UI will update to show "Pending"
+        return;
+      }
+      
+      // Show alert for other errors
       const message = getUserFriendlyMessage(error);
       Alert.alert('Request Failed', message);
     },
