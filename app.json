@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "TAALMEET",
-    "slug": "taalmeet-app",
+    "slug": "taalmeet",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -38,10 +38,11 @@
         }
       },
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "READ_EXTERNAL_STORAGE",
-        "READ_MEDIA_IMAGES"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -72,7 +73,8 @@
         }
       ],
       "@rnmapbox/maps",
-      "expo-asset"
+      "expo-asset",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
@@ -80,7 +82,11 @@
     "extra": {
       "router": {
         "origin": false
+      },
+      "eas": {
+        "projectId": "90c18f9e-7880-4204-baba-19624e1ba21b"
       }
-    }
+    },
+    "owner": "gm25"
   }
 }

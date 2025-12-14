@@ -50,6 +50,19 @@ export function useNearbyUsers(filters: NearbyUsersFilters = {}) {
     refetchInterval: 10 * 1000, // Refetch every 10 seconds
     refetchOnMount: true,
     refetchOnWindowFocus: true,
+    // Handle network errors gracefully
+    retry: (failureCount, error) => {
+      // Check if it's a network error
+      const isNetworkErr = error instanceof Error && (
+        error.message.includes('Network request failed') ||
+        error.message.includes('network') ||
+        error.message.includes('fetch')
+      );
+      // Retry network errors up to 2 times
+      return isNetworkErr && failureCount < 2;
+    },
+    // Don't throw errors, handle them in component
+    throwOnError: false,
   });
 }
 
@@ -108,9 +121,21 @@ export function useUpdateUserLocation() {
       queryClient.invalidateQueries({ queryKey: ['nearbyUsers'] });
     },
     onError: (error) => {
-      const message = getUserFriendlyMessage(error);
-      Alert.alert('Update Failed', message);
+      // Only show alert for non-network errors
+      const isNetworkErr = error instanceof Error && (
+        error.message.includes('Network request failed') ||
+        error.message.includes('network') ||
+        error.message.includes('fetch')
+      );
+      
+      if (!isNetworkErr) {
+        const message = getUserFriendlyMessage(error);
+        Alert.alert('Update Failed', message);
+      }
+      // Network errors are handled silently - location will retry automatically
     },
+    // Don't throw errors, handle them in onError
+    throwOnError: false,
   });
 }
 

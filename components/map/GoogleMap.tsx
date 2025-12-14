@@ -3,7 +3,7 @@
  * Fallback map implementation using react-native-maps
  */
 
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useImperativeHandle, forwardRef } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { GOOGLE_MAPS_API_KEY } from '@/lib/config';
@@ -33,6 +33,10 @@ export interface GoogleMapProps {
     isOnline?: boolean;
   }>;
   /**
+   * ID of the currently active partner (for highlighting)
+   */
+  activePartnerId?: string | null;
+  /**
    * Callback when a user marker is pressed
    */
   onUserPress?: (user: any) => void;
@@ -50,19 +54,59 @@ export interface GoogleMapProps {
   mapType?: 'standard' | 'satellite' | 'hybrid';
 }
 
+export interface GoogleMapRef {
+  centerOnPartner: (lat: number, lng: number) => void;
+}
+
 // ============================================================================
 // COMPONENT
 // ============================================================================
 
-export function GoogleMap({
+export const GoogleMap = forwardRef<GoogleMapRef, GoogleMapProps>(({
   userLocation,
   users = [],
+  activePartnerId,
   onUserPress,
   onUserLocationUpdate,
   zoomLevel = 13,
   mapType = 'standard',
-}: GoogleMapProps) {
+}, ref) => {
   const mapRef = useRef<MapView>(null);
+
+  // Expose method to center on partner
+  useImperativeHandle(ref, () => ({
+    centerOnPartner: (lat: number, lng: number) => {
+      if (mapRef.current) {
+        mapRef.current.animateToRegion(
+          {
+            latitude: lat,
+            longitude: lng,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
+          },
+          500
+        );
+      }
+    },
+  }));
+
+  // Center on active partner
+  useEffect(() => {
+    if (activePartnerId && mapRef.current) {
+      const activeUser = users.find(u => u.id === activePartnerId);
+      if (activeUser && activeUser.lat && activeUser.lng) {
+        mapRef.current.animateToRegion(
+          {
+            latitude: activeUser.lat,
+            longitude: activeUser.lng,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
+          },
+          500
+        );
+      }
+    }
+  }, [activePartnerId, users]);
 
   // Default location (The Hague)
   const defaultLocation = {
@@ -222,6 +266,8 @@ export function GoogleMap({
               finalLng = lng + (offsetDistance * Math.sin(angle));
             }
 
+            const isActive = user.id === activePartnerId;
+
             return (
               <Marker
                 key={`marker-${user.id}`}
@@ -234,15 +280,34 @@ export function GoogleMap({
                 title={user.displayName}
                 description={teachingLang}
                 tracksViewChanges={false}
-                zIndex={index}
+                zIndex={isActive ? 1000 : index}
               >
               <View style={styles.markerContainer}>
+                {/* Highlight ring for active marker */}
+                {isActive && (
+                  <View
+                    style={[
+                      styles.highlightRing,
+                      {
+                        width: 64,
+                        height: 64,
+                        borderRadius: 32,
+                        borderColor: '#6366f1',
+                        borderWidth: 3,
+                      },
+                    ]}
+                  />
+                )}
                 <View
                   style={[
                     styles.marker,
                     {
-                      borderColor: isOnline ? '#10B981' : '#6B7280',
-                      borderWidth: isOnline ? 3 : 2,
+                      borderColor: isActive
+                        ? '#6366f1'
+                        : isOnline
+                        ? '#10B981'
+                        : '#6B7280',
+                      borderWidth: isActive ? 4 : isOnline ? 3 : 2,
                     },
                   ]}
                 >
@@ -274,7 +339,7 @@ export function GoogleMap({
       </MapView>
     </View>
   );
-}
+});
 
 // ============================================================================
 // STYLES
@@ -352,6 +417,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
     borderWidth: 2,
     borderColor: '#FFFFFF',
+  },
+  highlightRing: {
+    position: 'absolute',
+    backgroundColor: 'transparent',
   },
   radarContainer: {
     width: 120,

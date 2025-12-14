@@ -3,11 +3,12 @@
  * Wrapper around @rnmapbox/maps MapView with user location and camera
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useImperativeHandle, forwardRef, useEffect } from 'react';
 import { View, StyleSheet, Image, Text } from 'react-native';
 import { Mapbox } from '@/services/mapbox';
 import MapboxLib, { Camera, MapView, UserLocation, PointAnnotation } from '@rnmapbox/maps';
 import { RadarPulse } from './RadarPulse';
+import { initializeMapbox } from '@/utils/mapboxConfig';
 
 // ============================================================================
 // TYPES
@@ -54,27 +55,63 @@ export interface MapboxMapProps {
   children?: React.ReactNode;
 }
 
+export interface MapboxMapRef {
+  centerOnPartner: (lat: number, lng: number) => void;
+}
+
 // ============================================================================
 // COMPONENT
 // ============================================================================
 
-export function MapboxMap({
+export const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
   userLocation,
   users = [],
   onUserPress,
   onUserLocationUpdate,
-  styleURL = Mapbox.StyleURL.Dark,
+  styleURL = 'mapbox://styles/mapbox/dark-v11',
   zoomLevel = 13,
   showUserLocation = true,
   children,
-}: MapboxMapProps) {
+}, ref) => {
   const cameraRef = useRef<Camera>(null);
+
+  // Ensure Mapbox is initialized before rendering
+  useEffect(() => {
+    if (Mapbox && typeof Mapbox.setAccessToken === 'function') {
+      const initialized = initializeMapbox();
+      if (!initialized) {
+        console.warn('[MapboxMap] Failed to initialize Mapbox. Map may not load correctly.');
+      }
+    }
+  }, []);
+
+  // Expose method to center on partner
+  useImperativeHandle(ref, () => ({
+    centerOnPartner: (lat: number, lng: number) => {
+      if (cameraRef.current) {
+        cameraRef.current.setCamera({
+          centerCoordinate: [lng, lat],
+          zoomLevel: 14,
+          animationDuration: 500,
+        });
+      }
+    },
+  }));
 
   // Default location (The Hague)
   const defaultLocation = [4.3007, 52.0705];
 
+  // Validate userLocation coordinates
+  const isValidLocation = userLocation &&
+    typeof userLocation.latitude === 'number' &&
+    typeof userLocation.longitude === 'number' &&
+    !isNaN(userLocation.latitude) &&
+    !isNaN(userLocation.longitude) &&
+    isFinite(userLocation.latitude) &&
+    isFinite(userLocation.longitude);
+
   // Determine center coordinates
-  const centerCoordinate = userLocation
+  const centerCoordinate = isValidLocation
     ? [userLocation.longitude, userLocation.latitude]
     : defaultLocation;
 
@@ -103,7 +140,7 @@ export function MapboxMap({
           ref={cameraRef}
           defaultSettings={initialCamera}
           centerCoordinate={
-            userLocation
+            isValidLocation
               ? ([userLocation.longitude, userLocation.latitude] as [number, number])
               : undefined
           }
@@ -127,7 +164,7 @@ export function MapboxMap({
         )}
 
         {/* Current user location marker with radar pulse (if userLocation provided) */}
-        {userLocation && (
+        {isValidLocation && userLocation && (
           <>
             {/* Radar pulse */}
             <PointAnnotation
@@ -181,7 +218,7 @@ export function MapboxMap({
       </MapView>
     </View>
   );
-}
+});
 
 // ============================================================================
 // STYLES

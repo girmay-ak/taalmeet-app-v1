@@ -144,6 +144,19 @@ export function parseSupabaseError(error: any): AppError {
   const message = error?.message || 'An unexpected error occurred';
   const code = error?.code || '';
 
+  // Network errors - check first
+  if (
+    message.includes('Network request failed') ||
+    message.includes('network') ||
+    message.includes('fetch') ||
+    message.includes('Failed to fetch') ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ENOTFOUND'
+  ) {
+    return new NetworkError('Network request failed. Please check your internet connection.');
+  }
+
   // Auth errors
   if (
     message.includes('User already registered') ||
@@ -191,9 +204,22 @@ export function isAppError(error: unknown): error is AppError {
  */
 export function getUserFriendlyMessage(error: unknown): string {
   if (isAppError(error)) {
+    // Network errors get a friendly message
+    if (error instanceof NetworkError) {
+      return 'Network request failed. Please check your internet connection and try again.';
+    }
     return error.message;
   }
   if (error instanceof Error) {
+    // Check for network errors in generic Error objects
+    if (
+      error.message.includes('Network request failed') ||
+      error.message.includes('network') ||
+      error.message.includes('fetch') ||
+      error.message.includes('Failed to fetch')
+    ) {
+      return 'Network request failed. Please check your internet connection and try again.';
+    }
     return error.message;
   }
   return 'An unexpected error occurred. Please try again.';

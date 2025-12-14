@@ -36,6 +36,10 @@ export interface NearbyUserMarkersProps {
    */
   onMarkerPress?: (user: NearbyUser) => void;
   /**
+   * ID of the currently active partner (for highlighting)
+   */
+  activePartnerId?: string | null;
+  /**
    * Size of marker avatar (default: 48)
    */
   markerSize?: number;
@@ -52,12 +56,14 @@ export interface NearbyUserMarkersProps {
 export function NearbyUserMarkers({
   users,
   onMarkerPress,
+  activePartnerId,
   markerSize = 48,
   showOnlineStatus = true,
 }: NearbyUserMarkersProps) {
   const { colors } = useTheme();
   const scaleAnims = useRef<Map<string, Animated.Value>>(new Map());
   const pulseAnims = useRef<Map<string, Animated.Value>>(new Map());
+  const highlightAnims = useRef<Map<string, Animated.Value>>(new Map());
 
   // Debug logging
   useEffect(() => {
@@ -162,7 +168,9 @@ export function NearbyUserMarkers({
         })
         .map((user, index) => {
           const scaleAnim = scaleAnims.current.get(user.id) || new Animated.Value(1);
+          const highlightAnim = highlightAnims.current.get(user.id) || new Animated.Value(0);
           const isOnline = user.isOnline ?? false;
+          const isActive = user.id === activePartnerId;
 
           // Ensure coordinates are valid numbers
           const lat = typeof user.lat === 'number' ? user.lat : parseFloat(String(user.lat));
@@ -200,6 +208,9 @@ export function NearbyUserMarkers({
           // Ensure unique ID for each marker
           const markerId = `marker-${user.id}`;
 
+          // Get pulse animation value
+          const pulseAnim = isOnline ? pulseAnims.current.get(user.id) : null;
+
           return (
             <PointAnnotation
               key={markerId}
@@ -207,99 +218,44 @@ export function NearbyUserMarkers({
               coordinate={[finalLng, finalLat]}
               onSelected={() => handleMarkerPress(user)}
             >
-            <Animated.View
-              style={[
-                styles.markerContainer,
-                {
-                  transform: [{ scale: scaleAnim }],
-                },
-              ]}
-            >
-              {/* Avatar Circle */}
-              <View
+              {/* Single wrapper View - Mapbox only allows 1 child */}
+              <Animated.View
                 style={[
-                  styles.avatarContainer,
+                  styles.markerContainer,
                   {
-                    width: markerSize,
-                    height: markerSize,
-                    borderRadius: markerSize / 2,
-                    borderColor: isOnline ? colors.primary : colors.border.default,
-                    borderWidth: isOnline ? 3 : 2,
-                    backgroundColor: colors.background.secondary,
+                    transform: [{ scale: scaleAnim }],
                   },
                 ]}
               >
-                {user.avatarUrl ? (
-                  <Image
-                    source={{ uri: user.avatarUrl }}
+                {/* Highlight ring for active marker */}
+                {isActive && (
+                  <Animated.View
                     style={[
-                      styles.avatar,
+                      styles.highlightRing,
                       {
-                        width: markerSize - 4,
-                        height: markerSize - 4,
-                        borderRadius: (markerSize - 4) / 2,
-                      },
-                    ]}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.avatarPlaceholder,
-                      {
-                        width: markerSize - 4,
-                        height: markerSize - 4,
-                        borderRadius: (markerSize - 4) / 2,
-                        backgroundColor: colors.primary,
-                      },
-                    ]}
-                  >
-                    <Animated.Text
-                      style={[
-                        styles.avatarInitial,
-                        { color: '#FFFFFF', fontSize: markerSize * 0.4 },
-                      ]}
-                    >
-                      {user.displayName.charAt(0).toUpperCase()}
-                    </Animated.Text>
-                  </View>
-                )}
-
-                {/* Online Status Indicator */}
-                {showOnlineStatus && isOnline && (
-                  <View
-                    style={[
-                      styles.onlineIndicator,
-                      {
-                        backgroundColor: colors.primary,
-                        borderColor: colors.background.secondary,
+                        width: markerSize + 16,
+                        height: markerSize + 16,
+                        borderRadius: (markerSize + 16) / 2,
+                        borderColor: colors.primary,
+                        opacity: highlightAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, 0.6],
+                        }),
+                        transform: [
+                          {
+                            scale: highlightAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0.8, 1.2],
+                            }),
+                          },
+                        ],
                       },
                     ]}
                   />
                 )}
 
-                {/* Language Badge */}
-                <View
-                  style={[
-                    styles.languageBadge,
-                    {
-                      backgroundColor: colors.background.secondary,
-                      borderColor: colors.border.default,
-                    },
-                  ]}
-                >
-                  <Animated.Text style={styles.languageFlag}>
-                    {getTeachingLanguage(user)}
-                  </Animated.Text>
-                </View>
-              </View>
-
-              {/* Pulse Animation for Online Users */}
-              {isOnline && (() => {
-                const pulseAnim = pulseAnims.current.get(user.id);
-                if (!pulseAnim) return null;
-
-                return (
+                {/* Pulse Animation for Online Users */}
+                {isOnline && pulseAnim && (
                   <Animated.View
                     style={[
                       styles.pulseRing,
@@ -316,11 +272,93 @@ export function NearbyUserMarkers({
                       },
                     ]}
                   />
-                );
-              })()}
-            </Animated.View>
-          </PointAnnotation>
-        );
+                )}
+
+                {/* Avatar Circle */}
+                <View
+                  style={[
+                    styles.avatarContainer,
+                    {
+                      width: markerSize,
+                      height: markerSize,
+                      borderRadius: markerSize / 2,
+                      borderColor: isActive
+                        ? colors.primary
+                        : isOnline
+                        ? colors.primary
+                        : colors.border.default,
+                      borderWidth: isActive ? 4 : isOnline ? 3 : 2,
+                      backgroundColor: colors.background.secondary,
+                    },
+                  ]}
+                >
+                  {user.avatarUrl ? (
+                    <Image
+                      source={{ uri: user.avatarUrl }}
+                      style={[
+                        styles.avatar,
+                        {
+                          width: markerSize - 4,
+                          height: markerSize - 4,
+                          borderRadius: (markerSize - 4) / 2,
+                        },
+                      ]}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.avatarPlaceholder,
+                        {
+                          width: markerSize - 4,
+                          height: markerSize - 4,
+                          borderRadius: (markerSize - 4) / 2,
+                          backgroundColor: colors.primary,
+                        },
+                      ]}
+                    >
+                      <Animated.Text
+                        style={[
+                          styles.avatarInitial,
+                          { color: '#FFFFFF', fontSize: markerSize * 0.4 },
+                        ]}
+                      >
+                        {user.displayName.charAt(0).toUpperCase()}
+                      </Animated.Text>
+                    </View>
+                  )}
+
+                  {/* Online Status Indicator */}
+                  {showOnlineStatus && isOnline && (
+                    <View
+                      style={[
+                        styles.onlineIndicator,
+                        {
+                          backgroundColor: colors.primary,
+                          borderColor: colors.background.secondary,
+                        },
+                      ]}
+                    />
+                  )}
+
+                  {/* Language Badge */}
+                  <View
+                    style={[
+                      styles.languageBadge,
+                      {
+                        backgroundColor: colors.background.secondary,
+                        borderColor: colors.border.default,
+                      },
+                    ]}
+                  >
+                    <Animated.Text style={styles.languageFlag}>
+                      {getTeachingLanguage(user)}
+                    </Animated.Text>
+                  </View>
+                </View>
+              </Animated.View>
+            </PointAnnotation>
+          );
       })
       .filter((marker) => marker !== null) // Remove any null entries from invalid coordinates
     }
@@ -389,6 +427,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderWidth: 2,
     opacity: 0.3,
+  },
+  highlightRing: {
+    position: 'absolute',
+    borderWidth: 3,
+    backgroundColor: 'transparent',
   },
 });
 

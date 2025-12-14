@@ -31,44 +31,38 @@ import {
   useSentConnectionRequests,
   useAcceptRequest,
 } from '@/hooks/useConnections';
+import { useCreateConversation } from '@/hooks/useMessages';
 import { NotificationContainer } from '@/components/notifications/NotificationContainer';
 import { useMatchFound } from '@/providers/MatchFoundProvider';
 import type { ConnectionWithProfile } from '@/services/connectionsService';
 import * as Location from 'expo-location';
 import { MapErrorBoundary } from '@/components/map/MapErrorBoundary';
-// Conditionally import Mapbox (only if native code is available)
-let Mapbox: any = null;
-let MapboxMap: any = null;
-let NearbyUserMarkers: any = null;
-let isMapboxAvailable = false;
-
-try {
-  // Import Mapbox service (sets access token)
-  require('@/services/mapbox');
-  Mapbox = require('@rnmapbox/maps').default;
-  const mapComponents = require('@/components/map/MapboxMap');
-  MapboxMap = mapComponents.MapboxMap;
-  const markersComponents = require('@/components/map/NearbyUserMarkers');
-  NearbyUserMarkers = markersComponents.NearbyUserMarkers;
-  isMapboxAvailable = true;
-} catch (error) {
-  // Mapbox native code not available - will use Google Maps fallback
-  console.warn('Mapbox not available, using Google Maps fallback:', error);
-  isMapboxAvailable = false;
-}
-
-// Import Google Maps as fallback
-let GoogleMap: any = null;
-try {
-  const googleMapComponents = require('@/components/map/GoogleMap');
-  GoogleMap = googleMapComponents.GoogleMap;
-} catch (error) {
-  console.warn('Google Maps not available:', error);
-}
-
-import type { NearbyUser as NearbyUserMarker } from '@/components/map/NearbyUserMarkers';
+import { SwipeableCardStack } from '@/components/map/SwipeableCardStack';
+import type { PartnerCardData } from '@/components/map/SwipeablePartnerCard';
 import { getLanguageFlag } from '@/utils/languageFlags';
 import type { NearbyUser } from '@/services/locationService';
+import { isMapboxAvailable, Mapbox } from '@/services/mapbox';
+
+// Conditionally import Mapbox components to avoid crashes in Expo Go
+let MapboxMap: any = null;
+let NearbyUserMarkers: any = null;
+let MapboxMapRef: any = null;
+let mapboxComponentsLoaded = false;
+
+if (isMapboxAvailable) {
+  try {
+    const mapboxComponents = require('@/components/map/MapboxMap');
+    MapboxMap = mapboxComponents.MapboxMap;
+    MapboxMapRef = mapboxComponents.MapboxMapRef;
+    const markersComponents = require('@/components/map/NearbyUserMarkers');
+    NearbyUserMarkers = markersComponents.NearbyUserMarkers;
+    mapboxComponentsLoaded = true;
+    console.log('[MapScreen] ✅ Mapbox components loaded successfully');
+  } catch (error) {
+    console.warn('[MapScreen] Failed to load Mapbox components:', error);
+    mapboxComponentsLoaded = false;
+  }
+}
 
 const { width, height } = Dimensions.get('window');
 
@@ -82,23 +76,45 @@ interface Filters {
 export default function MapScreen() {
   const { colors } = useTheme();
   const { profile, user } = useAuth();
+  
+  // Log Mapbox initialization
+  useEffect(() => {
+    if (isMapboxAvailable) {
+      console.log('[MapScreen] ✅ Using Mapbox map');
+    } else {
+      console.warn('[MapScreen] ⚠️ Mapbox not available. Make sure Mapbox is properly configured.');
+    }
+  }, []);
+  
   const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
+  const [activeCardPartnerId, setActiveCardPartnerId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
-  // Initialize with default location (The Hague) so map shows immediately
-  const [userLocation, setUserLocation] = useState<[number, number] | null>([4.3007, 52.0705]);
+  // Initialize with profile location if available, otherwise default to The Hague
+  // Ensure coordinates are valid numbers
+  const getValidLocation = (lat: number | null | undefined, lng: number | null | undefined): [number, number] => {
+    if (lat && lng && 
+        typeof lat === 'number' && typeof lng === 'number' &&
+        !isNaN(lat) && !isNaN(lng) &&
+        isFinite(lat) && isFinite(lng)) {
+      return [lng, lat];
+    }
+    return [4.3007, 52.0705]; // Default to The Hague
+  };
+
+  const [userLocation, setUserLocation] = useState<[number, number]>(
+    getValidLocation(profile?.lat, profile?.lng)
+  );
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
   const [locationPermission, setLocationPermission] = useState<Location.PermissionStatus | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const locationWatchSubscription = useRef<Location.LocationSubscription | null>(null);
+  const mapRef = useRef<any>(null);
   const [filters, setFilters] = useState<Filters>({
     maxDistance: 50,
     availability: 'all',
     minMatchScore: 0,
     languages: [], // Initialize as empty array
   });
-
-  const bottomSheetHeight = useRef(new Animated.Value(140)).current;
   const updateLocationMutation = useUpdateUserLocation();
 
   // Get current user's languages for filtering
@@ -148,6 +164,7 @@ export default function MapScreen() {
   const sendConnectionRequestMutation = useSendConnectionRequest();
   const acceptRequestMutation = useAcceptRequest();
   const { showMatch } = useMatchFound();
+  const createConversationMutation = useCreateConversation();
   
 
   // Transform backend data to UI format
@@ -252,7 +269,7 @@ export default function MapScreen() {
   }, [selected, user?.id, connections, receivedRequests, sentRequests]);
 
   // Transform for markers component
-  const markerUsers: NearbyUserMarker[] = useMemo(() => {
+  const markerUsers = useMemo(() => {
     // First, filter and validate partners
     const validPartners = filteredPartners
       .filter(partner => {
@@ -313,20 +330,133 @@ export default function MapScreen() {
     return markers;
   }, [filteredPartners, nearbyUsers, user?.id]);
 
+  // Transform filteredPartners to PartnerCardData format
+  const partnerCards: PartnerCardData[] = useMemo(() => {
+    return filteredPartners.map((partner) => ({
+      id: partner.id,
+      name: partner.name,
+      age: partner.age,
+      avatar: partner.avatar,
+      distance: partner.distance,
+      matchScore: partner.matchScore,
+      languages: partner.languages,
+      isOnline: partner.isOnline,
+      availableNow: partner.availableNow,
+    }));
+  }, [filteredPartners]);
+
+  // Center map on partner location
+  const centerMapOnPartner = useCallback((partnerId: string) => {
+    const partner = filteredPartners.find((p) => p.id === partnerId);
+    if (!partner || !partner.lat || !partner.lng || !mapRef.current) return;
+    mapRef.current.centerOnPartner(partner.lat, partner.lng);
+
+    // Center map on partner location
+    // This will be handled by the map component when we pass the active partner
+    // For now, we just set the active card which will trigger marker highlight
+  }, [filteredPartners]);
+
+  // Handle card change (when swiping)
+  const handleCardChange = useCallback((partnerId: string | null) => {
+    setActiveCardPartnerId(partnerId);
+    if (partnerId) {
+      centerMapOnPartner(partnerId);
+    }
+  }, [centerMapOnPartner]);
+
+  // Handle swipe left (navigate to next - optional skip action)
+  const handleSwipeLeft = useCallback((partnerId: string) => {
+    // Navigation is handled by SwipeableCardStack
+    // This is just for optional skip action if needed
+  }, []);
+
+  // Handle swipe right (navigate to previous or mark as interested)
+  const handleSwipeRight = useCallback(async (partnerId: string) => {
+    // If swiping right on first card, mark as interested
+    if (!user?.id) return;
+    
+    const partner = filteredPartners.find((p) => p.id === partnerId);
+    if (!partner) return;
+
+    // Check connection status
+    const connection = connections.find((c) => c.partner.id === partnerId);
+    const sentRequest = sentRequests.find((r) => r.partner.id === partnerId);
+    const receivedRequest = receivedRequests.find((r) => r.user_id === partnerId);
+
+    if (connection?.status === 'accepted') {
+      // Already connected - open chat
+      try {
+        const conversationId = await createConversationMutation.mutateAsync(partnerId);
+        router.push(`/chat/${conversationId}`);
+      } catch (error) {
+        Alert.alert('Error', 'Failed to open chat. Please try again.');
+      }
+    } else if (receivedRequest?.status === 'pending') {
+      // Accept request
+      try {
+        await acceptRequestMutation.mutateAsync(receivedRequest.id);
+        const connectionToShow = {
+          ...receivedRequest,
+          status: 'accepted' as const,
+        };
+        showMatch(connectionToShow);
+      } catch (error) {
+        console.error('Failed to accept connection:', error);
+      }
+    } else if (!sentRequest) {
+      // Send connection request
+      try {
+        await sendConnectionRequestMutation.mutateAsync(partnerId);
+      } catch (error) {
+        console.error('Failed to send connection request:', error);
+      }
+    }
+  }, [user?.id, filteredPartners, connections, sentRequests, receivedRequests, createConversationMutation, acceptRequestMutation, sendConnectionRequestMutation, showMatch, router]);
+
+  // Handle view profile
+  const handleViewProfile = useCallback((partnerId: string) => {
+    router.push(`/partner/${partnerId}`);
+  }, [router]);
+
+  // Handle chat
+  const handleChat = useCallback(async (partnerId: string) => {
+    if (!user?.id) return;
+    
+    try {
+      const conversationId = await createConversationMutation.mutateAsync(partnerId);
+      router.push(`/chat/${conversationId}`);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to open chat. Please try again.');
+    }
+  }, [user?.id, createConversationMutation, router]);
+
   // Handle user location update
   const handleUserLocationUpdate = useCallback(async (location: { latitude: number; longitude: number }) => {
-    setUserLocation([location.longitude, location.latitude]);
+    const validLocation = getValidLocation(location.latitude, location.longitude);
+    setUserLocation(validLocation);
     
     // Update location in backend (debounced)
-    try {
-      await updateLocationMutation.mutateAsync({
-        lat: location.latitude,
-        lng: location.longitude,
-      });
-    } catch (error) {
-      // Silently fail - location update is not critical
-      console.warn('Failed to update location:', error);
-    }
+    // Use mutate instead of mutateAsync to avoid throwing errors
+    updateLocationMutation.mutate({
+      lat: location.latitude,
+      lng: location.longitude,
+    }, {
+      onError: (error) => {
+        // Only log network errors, don't show alerts
+        const isNetworkErr = error instanceof Error && (
+          error.message.includes('Network request failed') ||
+          error.message.includes('network') ||
+          error.message.includes('fetch')
+        );
+        if (isNetworkErr) {
+          // Silently fail - location update will retry automatically
+          console.warn('[MapScreen] Network error updating location (will retry):', error.message);
+        } else {
+          // Log other errors but don't show alert
+          console.warn('[MapScreen] Failed to update location:', error);
+        }
+      },
+    });
   }, [updateLocationMutation]);
 
   // Handle center on my location
@@ -355,12 +485,13 @@ export default function MapScreen() {
       });
 
       const { latitude, longitude } = location.coords;
-      setUserLocation([longitude, latitude]);
+      const validLocation = getValidLocation(latitude, longitude);
+      setUserLocation(validLocation);
       
       // Update in backend
       await updateLocationMutation.mutateAsync({
-        lat: latitude,
-        lng: longitude,
+        lat: validLocation[1],
+        lng: validLocation[0],
       });
     } catch (error) {
       console.error('Error centering on location:', error);
@@ -404,7 +535,7 @@ export default function MapScreen() {
           return;
         }
 
-        // Get current location
+        // Get current location from device
         setIsGettingLocation(true);
         const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
@@ -412,9 +543,19 @@ export default function MapScreen() {
 
         if (isMounted) {
           const { latitude, longitude } = location.coords;
-          setUserLocation([longitude, latitude]);
           
-          // Update location in backend
+          // Only use device location if profile location is not available
+          // This prevents simulator's San Francisco location from overriding The Hague
+          if (!profile?.lat || !profile?.lng) {
+            const validLocation = getValidLocation(latitude, longitude);
+            setUserLocation(validLocation);
+            console.log('[MapScreen] Using device location (no profile location):', validLocation);
+          } else {
+            // Keep using profile location, but update backend with device location
+            console.log('[MapScreen] Profile location available, keeping it. Device location:', [longitude, latitude]);
+          }
+          
+          // Always update location in backend (for real devices)
           try {
             await updateLocationMutation.mutateAsync({
               lat: latitude,
@@ -436,12 +577,13 @@ export default function MapScreen() {
             (location) => {
               if (isMounted) {
                 const { latitude, longitude } = location.coords;
-                setUserLocation([longitude, latitude]);
+                const validLocation = getValidLocation(latitude, longitude);
+                setUserLocation(validLocation);
                 
                 // Update location in backend (debounced in mutation)
                 updateLocationMutation.mutate({
-                  lat: latitude,
-                  lng: longitude,
+                  lat: validLocation[1],
+                  lng: validLocation[0],
                 });
               }
             }
@@ -473,10 +615,15 @@ export default function MapScreen() {
     };
   }, []);
 
-  // Update location from profile when available (fallback)
+  // Prioritize profile location over device location (especially for simulator)
   useEffect(() => {
-    if (profile?.lat && profile?.lng && !userLocation) {
-      setUserLocation([profile.lng, profile.lat]);
+    const validLocation = getValidLocation(profile?.lat, profile?.lng);
+    
+    // Only update if it's different from current location
+    if (Math.abs(userLocation[0] - validLocation[0]) > 0.001 || 
+        Math.abs(userLocation[1] - validLocation[1]) > 0.001) {
+      setUserLocation(validLocation);
+      console.log('[MapScreen] Using location:', validLocation);
     }
   }, [profile?.lat, profile?.lng, userLocation]);
 
@@ -486,21 +633,14 @@ export default function MapScreen() {
     filters.minMatchScore > 0 ||
     (filters.languages && filters.languages.length > 0);
 
-  const toggleExpanded = () => {
-    const toValue = isExpanded ? 140 : height * 0.55;
-    Animated.spring(bottomSheetHeight, {
-      toValue,
-      useNativeDriver: false,
-      friction: 10,
-    }).start();
-    setIsExpanded(!isExpanded);
-  };
 
 
-  // Handle marker press
-  const handleMarkerPress = useCallback((user: NearbyUserMarker) => {
+  // Handle marker press - bring card to front
+  const handleMarkerPress = useCallback((user: any) => {
+    setActiveCardPartnerId(user.id);
     setSelectedPartner(user.id);
-  }, []);
+    centerMapOnPartner(user.id);
+  }, [centerMapOnPartner]);
 
   // Track retry attempts for network errors
   const [retryCount, setRetryCount] = useState(0);
@@ -543,76 +683,72 @@ export default function MapScreen() {
         
         {/* Map Area */}
         <View style={styles.mapContainer}>
-        {/* Mapbox Map, Google Maps fallback, or Loading UI */}
-        {isMapboxAvailable && userLocation ? (
+        {/* Use Mapbox if available, otherwise show message */}
+        {mapboxComponentsLoaded && MapboxMap && NearbyUserMarkers ? (
           <MapboxMap
-            userLocation={{
-              latitude: userLocation[1],
-              longitude: userLocation[0],
-            }}
-            showUserLocation={true}
+            ref={mapRef}
+            userLocation={
+              userLocation &&
+              typeof userLocation[0] === 'number' &&
+              typeof userLocation[1] === 'number' &&
+              !isNaN(userLocation[0]) &&
+              !isNaN(userLocation[1]) &&
+              isFinite(userLocation[0]) &&
+              isFinite(userLocation[1])
+                ? {
+                    latitude: userLocation[1],
+                    longitude: userLocation[0],
+                  }
+                : {
+                    latitude: 52.0705, // The Hague default
+                    longitude: 4.3007,
+                  }
+            }
             onUserLocationUpdate={handleUserLocationUpdate}
-            styleURL={Mapbox.StyleURL.Dark}
             zoomLevel={12}
+            styleURL={
+              mapType === 'satellite'
+                ? Mapbox?.StyleURL?.SatelliteStreet || 'mapbox://styles/mapbox/satellite-streets-v12'
+                : mapType === 'hybrid'
+                ? Mapbox?.StyleURL?.SatelliteStreet || 'mapbox://styles/mapbox/satellite-streets-v12'
+                : Mapbox?.StyleURL?.Dark || 'mapbox://styles/mapbox/dark-v11'
+            }
+            showUserLocation={true}
           >
             {/* Nearby User Markers */}
             <NearbyUserMarkers
               users={markerUsers}
-              onMarkerPress={handleMarkerPress}
-              markerSize={56}
+              activePartnerId={activeCardPartnerId}
+              onMarkerPress={(user) => {
+                // Find the partner by ID and trigger marker press
+                const partner = filteredPartners.find(p => p.id === user.id);
+                if (partner) {
+                  handleMarkerPress(partner);
+                }
+              }}
+              markerSize={48}
               showOnlineStatus={true}
             />
           </MapboxMap>
-        ) : GoogleMap && userLocation ? (
-          <GoogleMap
-            userLocation={{
-              latitude: userLocation[1],
-              longitude: userLocation[0],
-            }}
-            users={markerUsers}
-            onUserPress={handleMarkerPress}
-            onUserLocationUpdate={handleUserLocationUpdate}
-            zoomLevel={12}
-            mapType={mapType}
-          />
-        ) : GoogleMap ? (
-          // Show Google Maps with default location even if userLocation not ready
-          <GoogleMap
-            userLocation={{
-              latitude: 52.0705, // The Hague default
-              longitude: 4.3007,
-            }}
-            users={markerUsers}
-            onUserPress={handleMarkerPress}
-            onUserLocationUpdate={handleUserLocationUpdate}
-            zoomLevel={12}
-            mapType={mapType}
-          />
         ) : (
-          <View style={[styles.mapContainer, styles.loadingContainer, { backgroundColor: colors.background.primary }]}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.text.muted }]}>
-              Loading map...
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background.secondary, padding: 20 }}>
+            <Text style={{ color: colors.text.primary, fontSize: 18, fontWeight: '600', marginBottom: 12, textAlign: 'center' }}>
+              Mapbox Not Available
             </Text>
-            {!locationPermission && (
-              <View style={styles.locationPermissionPrompt}>
-                <Ionicons name="location-outline" size={24} color={colors.text.muted} />
-                <Text style={[styles.locationPermissionText, { color: colors.text.muted }]}>
-                  Location permission required to find nearby partners
-                </Text>
-                <TouchableOpacity
-                  onPress={handleCenterOnLocation}
-                  style={[styles.locationPermissionButton, { backgroundColor: colors.primary }]}
-                >
-                  <Text style={styles.locationPermissionButtonText}>Enable Location</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            <Text style={{ color: colors.text.muted, fontSize: 14, textAlign: 'center', marginBottom: 8 }}>
+              Mapbox requires native code compilation.
+            </Text>
+            <Text style={{ color: colors.text.muted, fontSize: 12, textAlign: 'center' }}>
+              Build with EAS or run "npx expo prebuild" and rebuild in Xcode to use Mapbox.
+            </Text>
+            <Text style={{ color: colors.text.muted, fontSize: 11, textAlign: 'center', marginTop: 16, fontStyle: 'italic' }}>
+              For now, you can still view nearby partners using the cards below.
+            </Text>
           </View>
         )}
 
-        {/* Fallback: Show partner markers as list overlay when no map is available */}
-        {!isMapboxAvailable && !GoogleMap && filteredPartners.length > 0 && (
+        {/* Fallback: Show partner markers as list overlay when map fails to load */}
+        {false && filteredPartners.length > 0 && (
           <View style={[styles.fallbackMarkersContainer, { backgroundColor: `${colors.background.secondary}E6` }]}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.fallbackMarkersList}>
               {filteredPartners.map((partner) => (
@@ -782,26 +918,52 @@ export default function MapScreen() {
         </View>
       </View>
 
-      {/* Bottom Sheet */}
-      <Animated.View
-        style={[
-          styles.bottomSheet,
-          {
-            backgroundColor: colors.background.secondary,
-            height: bottomSheetHeight,
-          },
-        ]}
-      >
-        {/* Handle */}
-        <TouchableOpacity onPress={toggleExpanded} style={styles.handleContainer}>
-          <View style={[styles.handle, { backgroundColor: colors.border.default }]} />
-        </TouchableOpacity>
+      {/* Swipeable Partner Cards */}
+      {!isLoading && !error && (
+        <SwipeableCardStack
+          partners={partnerCards}
+          onSwipeLeft={handleSwipeLeft}
+          onSwipeRight={handleSwipeRight}
+          onViewProfile={handleViewProfile}
+          onChat={handleChat}
+          onCardChange={handleCardChange}
+          activePartnerId={activeCardPartnerId}
+          emptyMessage={
+            nearbyUsers.length === 0
+              ? 'No Partners Nearby'
+              : 'No Matches with Current Filters'
+          }
+          emptySubmessage={
+            nearbyUsers.length === 0
+              ? hasActiveFilters
+                ? 'Try adjusting your filters or expanding your search distance.'
+                : 'There are no language partners nearby. Check back later or expand your search radius.'
+              : `We found ${nearbyUsers.length} partner${nearbyUsers.length !== 1 ? 's' : ''} nearby, but none match your filters.`
+          }
+        />
+      )}
 
-        {/* Content */}
-        <ScrollView
-          style={styles.sheetContent}
-          showsVerticalScrollIndicator={false}
+      {/* Legacy Bottom Sheet - Hidden but kept for reference */}
+      {false && (
+        <Animated.View
+          style={[
+            styles.bottomSheet,
+            {
+              backgroundColor: colors.background.secondary,
+              height: 140,
+            },
+          ]}
         >
+          {/* Handle */}
+          <TouchableOpacity style={styles.handleContainer}>
+            <View style={[styles.handle, { backgroundColor: colors.border.default }]} />
+          </TouchableOpacity>
+
+          {/* Content */}
+          <ScrollView
+            style={styles.sheetContent}
+            showsVerticalScrollIndicator={false}
+          >
           {selected ? (
             // Selected Partner Card
             <View
@@ -825,6 +987,13 @@ export default function MapScreen() {
                   <TouchableOpacity
                     style={[styles.viewProfileBtn, { backgroundColor: colors.primary }]}
                     onPress={() => {
+                      // Navigate to partner profile screen
+                      if (!selected.id) {
+                        console.error('[MapScreen] Cannot navigate: selected partner has no ID', selected);
+                        Alert.alert('Error', 'Unable to view profile: Invalid user ID');
+                        return;
+                      }
+                      console.log('[MapScreen] Navigating to partner profile:', selected.id, selected.name);
                       router.push(`/partner/${selected.id}`);
                     }}
                   >
@@ -834,14 +1003,31 @@ export default function MapScreen() {
                     // Connected - show Message button
                     <TouchableOpacity
                       style={[styles.chatBtn, { borderColor: colors.border.default }]}
-                      onPress={() => {
-                        router.push(`/chat/${selected.id}`);
+                      onPress={async () => {
+                        try {
+                          // Find or create conversation, then navigate
+                          const conversationId = await createConversationMutation.mutateAsync(selected.id);
+                          router.push(`/chat/${conversationId}`);
+                        } catch (error) {
+                          Alert.alert(
+                            'Error',
+                            'Failed to open chat. Please try again.',
+                            [{ text: 'OK' }]
+                          );
+                        }
                       }}
+                      disabled={createConversationMutation.isPending}
                     >
-                      <Ionicons name="chatbubble" size={18} color={colors.text.primary} />
-                      <Text style={[styles.chatBtnText, { color: colors.text.primary }]}>
-                        Message
-                      </Text>
+                      {createConversationMutation.isPending ? (
+                        <ActivityIndicator size="small" color={colors.text.primary} />
+                      ) : (
+                        <>
+                          <Ionicons name="chatbubble" size={18} color={colors.text.primary} />
+                          <Text style={[styles.chatBtnText, { color: colors.text.primary }]}>
+                            Message
+                          </Text>
+                        </>
+                      )}
                     </TouchableOpacity>
                   ) : selectedConnectionStatus?.status === 'request_sent' ? (
                     // Request sent - show pending state
@@ -927,48 +1113,10 @@ export default function MapScreen() {
             </View>
           )}
 
-          {/* Partner List (when expanded) */}
-          {isExpanded && (
-            <View style={styles.partnerList}>
-              {filteredPartners.map((partner) => (
-                <TouchableOpacity
-                  key={partner.id}
-                  style={[
-                    styles.partnerItem,
-                    {
-                      backgroundColor: colors.background.primary,
-                      borderColor: colors.border.default,
-                    },
-                  ]}
-                  onPress={() => {
-                    setSelectedPartner(partner.id);
-                    toggleExpanded();
-                  }}
-                >
-                  <View style={styles.partnerItemLeft}>
-                    <Image
-                      source={{ uri: partner.avatar }}
-                      style={styles.partnerItemAvatar}
-                    />
-                    {partner.isOnline && (
-                      <View style={styles.partnerItemOnline} />
-                    )}
-                  </View>
-                  <View style={styles.partnerItemInfo}>
-                    <Text style={[styles.partnerItemName, { color: colors.text.primary }]}>
-                      {partner.name}, {partner.age}
-                    </Text>
-                    <Text style={[styles.partnerItemMeta, { color: colors.text.muted }]}>
-                      {partner.distance}km • {partner.matchScore}% match
-                    </Text>
-                  </View>
-                  <Text style={styles.partnerItemFlag}>{partner.teaching.flag}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+          {/* Partner List - Removed (replaced by swipeable cards) */}
         </ScrollView>
-      </Animated.View>
+        </Animated.View>
+      )}
 
       {/* Filters Modal */}
       <Modal visible={showFilters} animationType="slide" transparent>
