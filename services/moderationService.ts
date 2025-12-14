@@ -343,25 +343,37 @@ export function containsProfanity(text: string): boolean {
  * Simple heuristics - in production, use ML-based spam detection
  */
 export function isSpam(text: string): boolean {
-  // Check for excessive repetition
+  // Skip spam detection for very short messages (likely legitimate)
+  if (text.trim().length < 50) {
+    return false;
+  }
+
+  // Check for excessive repetition (only for longer messages)
   const words = text.split(/\s+/);
-  if (words.length > 0) {
+  if (words.length > 15) {
     const uniqueWords = new Set(words);
     const repetitionRatio = uniqueWords.size / words.length;
-    if (repetitionRatio < 0.3 && words.length > 10) {
+    // More lenient: only flag if repetition ratio is very low (< 0.2) and message is long (> 20 words)
+    if (repetitionRatio < 0.2 && words.length > 20) {
       return true;
     }
   }
 
-  // Check for excessive capitalization
-  const capsRatio = (text.match(/[A-Z]/g) || []).length / text.length;
-  if (capsRatio > 0.7 && text.length > 20) {
-    return true;
+  // Check for excessive capitalization (only for longer messages)
+  if (text.length > 50) {
+    const capsRatio = (text.match(/[A-Z]/g) || []).length / text.length;
+    // More lenient: only flag if > 80% caps and message is long
+    if (capsRatio > 0.8 && text.length > 50) {
+      return true;
+    }
   }
 
-  // Check for excessive special characters
-  const specialCharRatio = (text.match(/[!@#$%^&*(),.?":{}|<>]/g) || []).length / text.length;
-  if (specialCharRatio > 0.3) {
+  // Check for excessive special characters (exclude common punctuation)
+  // Only count suspicious special chars, not common punctuation like . , ? !
+  const suspiciousChars = text.match(/[!@#$%^&*(){}|<>]/g) || [];
+  const suspiciousCharRatio = suspiciousChars.length / text.length;
+  // More lenient: only flag if > 40% suspicious chars and message is long
+  if (suspiciousCharRatio > 0.4 && text.length > 50) {
     return true;
   }
 

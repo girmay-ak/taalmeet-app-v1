@@ -112,34 +112,123 @@ export async function getProfile(userId: string): Promise<User | null> {
 
 /**
  * Get user profile with languages
+ * Queries the profiles table (not users table) to match getNearbyUsers
  */
 export async function getProfileWithLanguages(userId: string): Promise<UserProfile | null> {
-  const { data: user, error: userError } = await supabase
-    .from('users')
+  console.log('[getProfileWithLanguages] Fetching profile for user:', userId);
+  
+  // Try profiles table first (used by getNearbyUsers)
+  let { data: profile, error: profileError } = await supabase
+    .from('profiles')
     .select('*')
     .eq('id', userId)
     .single();
 
-  if (userError) {
-    if (userError.code === 'PGRST116') {
-      return null;
+  // If not found in profiles, try users table (backward compatibility)
+  if (profileError && profileError.code === 'PGRST116') {
+    console.log('[getProfileWithLanguages] Not found in profiles table, trying users table:', userId);
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (userError) {
+      if (userError.code === 'PGRST116') {
+        console.log('[getProfileWithLanguages] User not found in either table (PGRST116):', userId);
+        return null;
+      }
+      console.error('[getProfileWithLanguages] Error fetching user:', {
+        userId,
+        errorCode: userError.code,
+        errorMessage: userError.message,
+      });
+      throw parseSupabaseError(userError);
     }
-    throw parseSupabaseError(userError);
+
+    // Convert users table format to match profiles format
+    profile = {
+      id: user.id,
+      display_name: user.full_name,
+      avatar_url: user.avatar_url,
+      bio: user.bio,
+      city: user.city,
+      country: user.country,
+      is_online: user.is_online,
+      last_active_at: user.last_seen_at,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+    } as any;
+    profileError = null;
+  } else if (profileError) {
+    // Actual error (not just not found)
+    console.error('[getProfileWithLanguages] Error fetching profile:', {
+      userId,
+      errorCode: profileError.code,
+      errorMessage: profileError.message,
+      errorDetails: profileError,
+    });
+    throw parseSupabaseError(profileError);
   }
 
-  const { data: languages, error: langError } = await supabase
+  if (!profile) {
+    console.log('[getProfileWithLanguages] Profile data is null:', userId);
+    return null;
+  }
+
+  console.log('[getProfileWithLanguages] Profile found:', profile.display_name || profile.id);
+
+  // Get languages - transform to match UserLanguage interface
+  const { data: languagesData, error: langError } = await supabase
     .from('user_languages')
     .select('*')
     .eq('user_id', userId);
 
   if (langError) {
+    console.error('[getProfileWithLanguages] Error fetching languages:', {
+      userId,
+      errorCode: langError.code,
+      errorMessage: langError.message,
+    });
     throw parseSupabaseError(langError);
   }
 
+  // Transform languages to match UserLanguage interface (with role field)
+  const languages = (languagesData || []).map((lang: any) => ({
+    id: lang.id,
+    user_id: lang.user_id,
+    language: lang.language || lang.language_code, // Support both field names
+    level: lang.level || lang.proficiency_level, // Support both field names
+    role: lang.role || (lang.is_learning ? 'learning' : 'teaching'), // Transform is_learning to role
+    created_at: lang.created_at,
+    updated_at: lang.updated_at || lang.created_at,
+  }));
+
+  console.log('[getProfileWithLanguages] Profile loaded successfully:', {
+    userId,
+    name: profile.display_name || profile.id,
+    languagesCount: languages.length,
+  });
+
+  // Return in UserProfile format (matching User interface but with display_name)
   return {
-    ...user,
-    languages: languages || [],
-  };
+    id: profile.id,
+    email: '', // Not in profiles table
+    full_name: profile.display_name || '',
+    username: null,
+    bio: profile.bio,
+    avatar_url: profile.avatar_url,
+    city: profile.city,
+    country: profile.country,
+    interests: null,
+    date_of_birth: null,
+    gender: null,
+    is_online: profile.is_online || false,
+    last_seen_at: profile.last_active_at || profile.updated_at,
+    created_at: profile.created_at,
+    updated_at: profile.updated_at,
+    languages: languages,
+  } as UserProfile;
 }
 
 /**

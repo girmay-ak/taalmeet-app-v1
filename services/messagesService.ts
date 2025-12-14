@@ -181,23 +181,19 @@ export async function getConversations(userId: string): Promise<ConversationList
 
   const unreadMap = new Map(unreadCounts.map(u => [u.convId, u.count]));
 
-  // Fetch actual last messages for conversations where last_message_content is null
-  // but last_message_at is set (indicating messages exist)
-  const conversationsNeedingLastMessage = conversations.filter(
-    conv => !conv.last_message_content && conv.last_message_at
-  );
-  
+  // Fetch actual last messages for all conversations
+  // Always fetch from messages table to ensure we have the latest message
   const lastMessageMap = new Map<string, string>();
   
-  if (conversationsNeedingLastMessage.length > 0) {
-    const lastMessagePromises = conversationsNeedingLastMessage.map(async (conv) => {
+  if (conversations.length > 0) {
+    const lastMessagePromises = conversations.map(async (conv) => {
       const { data: lastMsg, error } = await supabase
         .from('messages')
         .select('content')
         .eq('conversation_id', conv.id)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to handle no messages gracefully
       
       if (!error && lastMsg) {
         return { convId: conv.id, content: lastMsg.content };
@@ -218,8 +214,9 @@ export async function getConversations(userId: string): Promise<ConversationList
     const otherUserId = conversationToOtherUser.get(conv.id);
     const otherUserProfile = otherUserId ? profileMap.get(otherUserId) : null;
 
-    // Use last_message_content if available, otherwise fetch from map
-    const lastMessage = conv.last_message_content || lastMessageMap.get(conv.id) || null;
+    // Always use the fetched last message from messages table (most reliable)
+    // Fall back to last_message_content from conversations table if available
+    const lastMessage = lastMessageMap.get(conv.id) || conv.last_message_content || null;
 
     return {
       id: conv.id,
@@ -491,6 +488,8 @@ export async function createConversation(
     console.log('[messagesService] User conversations found:', userConversations?.length || 0);
   }
 
+  let existingConversationId: string | null = null;
+  
   if (userConversations && userConversations.length > 0) {
     const conversationIds = userConversations.map(c => c.conversation_id);
     if (ENABLE_LOGGING) {
@@ -504,14 +503,15 @@ export async function createConversation(
       .eq('user_id', otherUserId)
       .in('conversation_id', conversationIds)
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (existing && !checkError) {
       // Conversation already exists
+      existingConversationId = existing.conversation_id;
       if (ENABLE_LOGGING) {
-        console.log('[messagesService] Existing conversation found:', existing.conversation_id);
+        console.log('[messagesService] Existing conversation found:', existingConversationId);
       }
-      return existing.conversation_id;
+      return existingConversationId;
     }
     if (ENABLE_LOGGING) {
       console.log('[messagesService] No existing conversation found, creating new one');
@@ -546,7 +546,7 @@ export async function createConversation(
 
   // Award points for starting a new conversation (only if it was just created)
   // Check if this is a new conversation by checking if we returned early above
-  const wasNewConversation = !existing || checkError;
+  const wasNewConversation = !existingConversationId;
   if (wasNewConversation) {
     try {
       await gamificationService.addPoints(

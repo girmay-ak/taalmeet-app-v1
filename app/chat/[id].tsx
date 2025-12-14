@@ -3,7 +3,7 @@
  * Individual chat conversation with a partner
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -28,19 +28,27 @@ import { ReportUserModal } from '@/components/modals/ReportUserModal';
 import { ActivityIndicator, Alert } from 'react-native';
 import { TranslationButton, MessageTranslation } from '@/components/chat/TranslationButton';
 import { useTranslateText, useTranslationPreferences } from '@/hooks/useTranslation';
+import type { Message } from '@/types/database';
 
 export default function ChatScreen() {
   const { id: conversationId } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const scrollViewRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
   const [message, setMessage] = useState('');
   const [showMenu, setShowMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [messageTranslations, setMessageTranslations] = useState<Record<string, { text: string; show: boolean }>>({});
   const [translatingMessages, setTranslatingMessages] = useState<Record<string, boolean>>({});
+  const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+  const scrollPositionRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const prevLastMessageIdRef = useRef<string | null>(null);
   
   // Fetch messages from backend
-  const { data: messages = [], isLoading: messagesLoading, isError: messagesError, error: messagesErrorObj } = useMessages(conversationId);
+  const { data: messages = [], isLoading: messagesLoading, isError: messagesError } = useMessages(conversationId);
   const sendMessageMutation = useSendMessage();
   const markAsReadMutation = useMarkAsRead();
   const { data: currentUser } = useCurrentUser();
@@ -65,39 +73,123 @@ export default function ChatScreen() {
   // Default to English if not available
   const learningLanguage = translationPreferences?.default_target_language || 'en';
 
-  // Debug logging (only in development)
-  if (__DEV__) {
-    console.log('[ChatScreen] Render state:', {
-      conversationId,
-      messagesLoading,
-      messagesError,
-      messagesCount: messages?.length || 0,
-      currentUserId: currentUser?.id,
-      conversationFound: !!conversation,
-    });
-  }
-  
-  // Mark conversation as read when screen is focused
+  // Combine real messages with optimistic messages
+  const displayMessages = useMemo(() => {
+    // Filter out optimistic messages that have been confirmed
+    const confirmedOptimisticIds = new Set(messages.map(m => m.id));
+    const pendingOptimistic = optimisticMessages.filter(m => !confirmedOptimisticIds.has(m.id));
+    return [...messages, ...pendingOptimistic].sort((a, b) => 
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+  }, [messages, optimisticMessages]);
+
+  // Mark conversation as read when screen is focused and messages are loaded
   useEffect(() => {
-    if (conversationId) {
+    if (conversationId && !messagesLoading && displayMessages.length > 0) {
+      // Mark as read when messages are loaded
       markAsReadMutation.mutate(conversationId);
     }
+  }, [conversationId, messagesLoading, displayMessages.length]);
+
+  // Reset scroll state when conversation changes
+  useEffect(() => {
+    setHasScrolledToBottom(false);
+    setIsNearBottom(true);
+    prevLastMessageIdRef.current = null;
   }, [conversationId]);
 
+  // Initial scroll to bottom when messages first load
+  useEffect(() => {
+    if (displayMessages.length > 0 && !hasScrolledToBottom && !messagesLoading) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+        setHasScrolledToBottom(true);
+        setIsNearBottom(true);
+      }, 100);
+    }
+  }, [displayMessages.length, messagesLoading, hasScrolledToBottom]);
+
+  // Smart auto-scroll: only if user is near bottom
+  useEffect(() => {
+    if (displayMessages.length > 0 && !messagesLoading && isNearBottom && hasScrolledToBottom) {
+      const lastMessageId = displayMessages[displayMessages.length - 1]?.id;
+      
+      // Only auto-scroll if a new message was added
+      if (lastMessageId && lastMessageId !== prevLastMessageIdRef.current) {
+        prevLastMessageIdRef.current = lastMessageId;
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    }
+  }, [displayMessages, messagesLoading, isNearBottom, hasScrolledToBottom]);
+
+  // Track scroll position to determine if user is near bottom
+  const handleScroll = useCallback((event: any) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    scrollPositionRef.current = contentOffset.y;
+    contentHeightRef.current = contentSize.height;
+    
+    // Consider "near bottom" if within 200px of bottom
+    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    setIsNearBottom(distanceFromBottom < 200);
+  }, []);
+
   const handleSend = async () => {
-    if (!message.trim() || !conversationId) return;
+    if (!message.trim() || !conversationId || isBlocked) return;
+
+    const messageText = message.trim();
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    
+    // Optimistic update: add message immediately
+    const optimisticMessage: Message = {
+      id: tempId,
+      conversation_id: conversationId,
+      sender_id: currentUser?.id || '',
+      content: messageText,
+      is_read: false,
+      read_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    
+    setOptimisticMessages(prev => [...prev, optimisticMessage]);
+    setMessage(''); // Clear input immediately (keeps keyboard open)
+    setIsNearBottom(true); // Force scroll to bottom
+    
+    // Keep input focused (keyboard stays open)
+    inputRef.current?.focus();
+    
+    // Scroll to bottom immediately
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 50);
 
     try {
+      // Send message to backend
       await sendMessageMutation.mutateAsync({
         conversationId,
-        text: message.trim(),
+        text: messageText,
       });
-      setMessage('');
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      
+      // Remove optimistic message (real one will replace it)
+      setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
     } catch (error) {
-      // Error is handled by the hook
+      // On error: remove optimistic message and restore text
+      setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
+      setMessage(messageText); // Restore message text for retry
+      // Keep keyboard open for retry
+      inputRef.current?.focus();
     }
   };
+
+  // Handle back button - mark as read and refresh conversations
+  const handleBack = useCallback(() => {
+    if (conversationId && displayMessages.length > 0) {
+      markAsReadMutation.mutate(conversationId);
+    }
+    router.back();
+  }, [conversationId, displayMessages.length]);
 
   // Format time for display
   const formatTime = (timestamp: string) => {
@@ -132,7 +224,7 @@ export default function ChatScreen() {
         [messageId]: { text: result.translatedText, show: true }
       }));
     } catch (error) {
-      console.error('Translation failed:', error);
+      // Translation failed silently - user can try again
     } finally {
       setTranslatingMessages(prev => ({ ...prev, [messageId]: false }));
     }
@@ -174,7 +266,7 @@ export default function ChatScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background.primary }]} edges={['top']}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
 
@@ -205,10 +297,16 @@ export default function ChatScreen() {
         )}
 
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.headerButton}>
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={() => Alert.alert('Coming Soon', 'Voice calls will be available soon!')}
+          >
             <Ionicons name="call-outline" size={22} color={colors.text.primary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton}>
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={() => Alert.alert('Coming Soon', 'Video calls will be available soon!')}
+          >
             <Ionicons name="videocam-outline" size={22} color={colors.text.primary} />
           </TouchableOpacity>
           <TouchableOpacity 
@@ -246,7 +344,7 @@ export default function ChatScreen() {
         style={styles.keyboardView}
         keyboardVerticalOffset={0}
       >
-        {messagesLoading ? (
+        {messagesLoading && displayMessages.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={[styles.loadingText, { color: colors.text.muted }]}>Loading messages...</Text>
@@ -267,15 +365,20 @@ export default function ChatScreen() {
           <ScrollView
             ref={scrollViewRef}
             style={styles.messagesContainer}
-            contentContainerStyle={styles.messagesContent}
+            contentContainerStyle={[styles.messagesContent, styles.emptyContent]}
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIcon, { backgroundColor: colors.background.secondary }]}>
-                <Ionicons name="chatbubble-outline" size={48} color={colors.text.muted} />
+                <Ionicons name="chatbubble-outline" size={64} color={colors.text.muted} />
               </View>
               <Text style={[styles.emptyText, { color: colors.text.primary }]}>
-                Say hi and start the conversation
+                No messages yet
+              </Text>
+              <Text style={[styles.emptySubtext, { color: colors.text.muted }]}>
+                {conversation?.otherUser?.displayName 
+                  ? `Start a conversation with ${conversation.otherUser.displayName}`
+                  : 'Say hi and start the conversation'}
               </Text>
             </View>
           </ScrollView>
@@ -285,7 +388,8 @@ export default function ChatScreen() {
           style={styles.messagesContainer}
           contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: false })}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
         >
           {/* Date Divider */}
           <View style={styles.dateDivider}>
@@ -295,7 +399,7 @@ export default function ChatScreen() {
           </View>
 
           {/* Messages */}
-            {messages.map((msg) => {
+            {displayMessages.map((msg) => {
               const isMyMessage = msg.sender_id === currentUser?.id;
               return (
             <View
@@ -368,8 +472,12 @@ export default function ChatScreen() {
                       </TouchableOpacity>
                     </>
                   )}
-                  {isMyMessage && msg.is_read && (
-                    <Ionicons name="checkmark-done" size={14} color={colors.text.muted} />
+                  {isMyMessage && (
+                    <Ionicons 
+                      name={msg.is_read ? "checkmark-done" : "checkmark"} 
+                      size={14} 
+                      color={msg.is_read ? colors.primary : colors.text.muted} 
+                    />
                   )}
                 </View>
               </View>
@@ -394,18 +502,20 @@ export default function ChatScreen() {
 
             <View style={[styles.inputContainer, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}>
               <TextInput
+                ref={inputRef}
                 style={[styles.input, { color: colors.text.primary }]}
                 placeholder="Message..."
                 placeholderTextColor={colors.text.muted}
                 value={message}
                 onChangeText={setMessage}
                 multiline
-                maxLength={1000}
+                maxLength={2000}
                 onSubmitEditing={() => {
                   // Prevent auto-submit on Enter - only send via button
                   // On mobile, Enter creates new line in multiline TextInput
                 }}
                 blurOnSubmit={false}
+                editable={!isBlocked}
               />
               <TouchableOpacity style={styles.emojiButton}>
                 <Ionicons name="happy-outline" size={22} color={colors.text.muted} />
@@ -640,11 +750,16 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 14,
   },
+  emptyContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
+    minHeight: 400,
   },
   emptyIcon: {
     width: 80,
