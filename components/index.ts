@@ -66,6 +66,7 @@ export { PushNotificationsSetup } from './notifications/PushNotificationsSetup';
 
 // Discovery
 export { DiscoveryFiltersModal } from './discovery/DiscoveryFiltersModal';
+export { PartnerDiscoveryCard } from './discovery/PartnerDiscoveryCard';
 
 // Chat
 export { TranslationButton, MessageTranslation } from './chat/TranslationButton';
