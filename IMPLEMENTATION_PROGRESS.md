@@ -41,12 +41,13 @@
 
 ## 🚧 Next Steps (In Order)
 
-### Step 3: Partner Discovery Cards
-- [ ] Create partner card component
-- [ ] Add match percentage display
-- [ ] Add language flags
-- [ ] Add distance indicator
-- [ ] Add connection status buttons
+### Step 3: Partner Discovery Cards ✅
+- [x] Create partner card component (PartnerDiscoveryCard)
+- [x] Add match percentage display
+- [x] Add language flags
+- [x] Add distance indicator
+- [x] Add connection status buttons (Connect/Message/Pending)
+- [x] Add online status indicator
 
 ### Step 4: Map View Enhancements
 - [ ] Improve map markers
