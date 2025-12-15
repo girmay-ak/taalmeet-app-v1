@@ -16,7 +16,24 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useTheme } from '@/lib/theme/ThemeProvider';
-import MapView, { Marker } from 'react-native-maps';
+
+// Use Mapbox or Google Maps based on availability
+let MapView: any;
+let Marker: any;
+
+try {
+  const mapbox = require('@rnmapbox/maps');
+  MapView = mapbox.MapView;
+  Marker = mapbox.PointAnnotation;
+} catch {
+  try {
+    const maps = require('react-native-maps');
+    MapView = maps.default;
+    Marker = maps.Marker;
+  } catch {
+    // Maps not available
+  }
+}
 
 const { width, height } = Dimensions.get('window');
 
