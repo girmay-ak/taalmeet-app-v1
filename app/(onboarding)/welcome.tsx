@@ -62,8 +62,8 @@ export default function WelcomeScreen() {
         {/* Continue Button */}
         <TouchableOpacity
           style={[styles.button, { backgroundColor: colors.primary }]}
-          onPress={() => router.push('/(onboarding)/profile-setup')}>
-          <Text style={styles.buttonText}>Continue to Profile Setup</Text>
+          onPress={() => router.push('/(onboarding)/onboarding-1')}>
+          <Text style={styles.buttonText}>Get Started</Text>
         </TouchableOpacity>
 
         {/* Skip */}
