@@ -1,54 +1,66 @@
 /**
  * Splash Screen - React Native Version
- * 
- * Initial loading screen with logo animation
+ * Matches Eveno design: Clean white background, logo, loading animation
  */
 
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { router } from 'expo-router';
-import { FlowingWavesRN, TaalMeetLogo } from '@/components';
+import { TaalMeetLogo } from '@/components';
 import { useTheme } from '@/lib/theme/ThemeProvider';
-import { spacing, textStyles } from '@/lib/theme';
 
 export default function SplashScreen() {
   const { colors } = useTheme();
-  const scaleAnim = useRef(new Animated.Value(0.3)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-  const textOpacityAnim = useRef(new Animated.Value(0)).current;
-  const textTranslateAnim = useRef(new Animated.Value(20)).current;
+  const dotAnimations = useRef(
+    Array.from({ length: 8 }, () => ({
+      scale: new Animated.Value(0.3),
+      opacity: new Animated.Value(0.3),
+    }))
+  ).current;
 
   useEffect(() => {
-    // Logo animation
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Animate loading dots in sequence
+    const animateDots = () => {
+      const animations = dotAnimations.map((dot, index) => {
+        return Animated.sequence([
+          Animated.delay(index * 100),
+          Animated.parallel([
+            Animated.spring(dot.scale, {
+              toValue: 1,
+              tension: 50,
+              friction: 7,
+              useNativeDriver: true,
+            }),
+            Animated.timing(dot.opacity, {
+              toValue: 1,
+              duration: 300,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.delay(200),
+          Animated.parallel([
+            Animated.spring(dot.scale, {
+              toValue: 0.3,
+              tension: 50,
+              friction: 7,
+              useNativeDriver: true,
+            }),
+            Animated.timing(dot.opacity, {
+              toValue: 0.3,
+              duration: 300,
+              useNativeDriver: true,
+            }),
+          ]),
+        ]);
+      });
 
-    // Text animation
-    Animated.parallel([
-      Animated.timing(textOpacityAnim, {
-        toValue: 1,
-        duration: 500,
-        delay: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(textTranslateAnim, {
-        toValue: 0,
-        duration: 500,
-        delay: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
+      // Loop animation
+      Animated.loop(
+        Animated.sequence(animations)
+      ).start();
+    };
+
+    animateDots();
 
     // Auto-redirect after 2.5 seconds
     const timer = setTimeout(() => {
@@ -59,58 +71,42 @@ export default function SplashScreen() {
   }, []);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
-      {/* Animated Background */}
-      <View style={styles.backgroundWaves}>
-        <FlowingWavesRN />
+    <View style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
+      {/* Logo */}
+      <View style={styles.logoContainer}>
+        <View style={[styles.logoWrapper, { backgroundColor: colors.primary }]}>
+          <TaalMeetLogo size={60} />
+        </View>
+        <Text style={[styles.logoText, { color: colors.primary }]}>TAALMEET</Text>
       </View>
 
-      {/* Logo Container */}
-      <Animated.View
-        style={[
-          styles.logoContainer,
-          {
-            transform: [{ scale: scaleAnim }],
-            opacity: opacityAnim,
-          },
-        ]}>
-        {/* Glow Effect */}
-        <View
-          style={[
-            styles.glowRing,
-            {
-              backgroundColor: colors.primary + '66', // 40% opacity
-            },
-          ]}
-        />
+      {/* Loading Animation - Circular dots */}
+      <View style={styles.loadingContainer}>
+        {dotAnimations.map((dot, index) => {
+          const angle = (index * 360) / 8;
+          const radius = 30;
+          const x = Math.cos((angle * Math.PI) / 180) * radius;
+          const y = Math.sin((angle * Math.PI) / 180) * radius;
 
-        {/* Logo Card */}
-        <View style={[styles.logoCard, { backgroundColor: 'transparent' }]}>
-          <TaalMeetLogo size={100} variant="icon" />
-        </View>
-      </Animated.View>
-
-      {/* App Name */}
-      <Animated.View
-        style={[
-          styles.textContainer,
-          {
-            opacity: textOpacityAnim,
-            transform: [{ translateY: textTranslateAnim }],
-          },
-        ]}>
-        <Text style={[styles.appName, { color: colors.text.primary }]}>
-          TaalMeet
-        </Text>
-        <Text style={[styles.tagline, { color: colors.text.muted }]}>
-          Meet. Speak. Connect.
-        </Text>
-      </Animated.View>
-
-      {/* Version */}
-      <Text style={[styles.version, { color: colors.text.muted }]}>
-        Version 1.0.0
-      </Text>
+          return (
+            <Animated.View
+              key={index}
+              style={[
+                styles.loadingDot,
+                {
+                  backgroundColor: colors.primary,
+                  transform: [
+                    { translateX: x },
+                    { translateY: y },
+                    { scale: dot.scale },
+                  ],
+                  opacity: dot.opacity,
+                },
+              ]}
+            />
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -120,62 +116,38 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  backgroundWaves: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    backgroundColor: '#FFFFFF',
   },
   logoContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 48,
+    marginBottom: 60,
   },
-  glowRing: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 40,
-    opacity: 0.4,
-  },
-  logoCard: {
+  logoWrapper: {
     width: 100,
     height: 100,
-    borderRadius: 32,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  logoPlaceholder: {
-    width: 80,
-    height: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 16,
   },
   logoText: {
-    fontSize: 48,
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
-  textContainer: {
+  loadingContainer: {
+    width: 100,
+    height: 100,
+    position: 'relative',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  appName: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  tagline: {
-    fontSize: 16,
-  },
-  version: {
-    fontSize: 12,
+  loadingDot: {
     position: 'absolute',
-    bottom: 48,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });
 
