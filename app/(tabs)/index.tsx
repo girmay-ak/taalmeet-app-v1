@@ -220,16 +220,15 @@ export default function HomeScreen() {
         {/* Top Bar */}
         <View style={styles.topBar}>
           <View style={styles.userInfo}>
-            <Image
-              source={{ 
-                uri: (profile?.avatarUrl && profile.avatarUrl.trim() !== '') 
-                  ? profile.avatarUrl 
-                  : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150' 
-              }}
-              style={[styles.userAvatar, { borderColor: colors.primary }]}
-            />
             <View>
-              <Text style={[styles.welcomeText, { color: colors.text.muted }]}>Welcome 👋</Text>
+              <Text style={[styles.greetingText, { color: colors.text.muted }]}>
+                {(() => {
+                  const hour = new Date().getHours();
+                  if (hour < 12) return 'Good Morning';
+                  if (hour < 17) return 'Good Afternoon';
+                  return 'Good Evening';
+                })()}
+              </Text>
               <Text style={[styles.userName, { color: colors.text.primary }]}>{userName}</Text>
             </View>
           </View>
@@ -250,15 +249,27 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Search Bar */}
+        <TouchableOpacity
+          style={[styles.searchBar, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}
+          onPress={() => {
+            // TODO: Navigate to search screen
+            console.log('Search pressed');
+          }}
+        >
+          <Ionicons name="search-outline" size={20} color={colors.text.muted} />
+          <Text style={[styles.searchPlaceholder, { color: colors.text.muted }]}>
+            What language partner are you looking for?
+          </Text>
+          <Ionicons name="options-outline" size={20} color={colors.text.muted} />
+        </TouchableOpacity>
+
         {/* Section Title */}
-        <Text style={[styles.sectionSubtitle, { color: colors.text.muted }]}>Language Exchange Sessions</Text>
         <View style={styles.titleRow}>
-          <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Happening Today</Text>
-          <View style={[styles.countBadge, { backgroundColor: colors.background.primary }]}>
-            <Text style={[styles.countText, { color: colors.text.primary }]}>
-              ({data?.sessions?.length || 0})
-            </Text>
-          </View>
+          <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Popular Event</Text>
+          <TouchableOpacity>
+            <Text style={[styles.seeAllText, { color: colors.primary }]}>See All</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Language Filter Pills */}
@@ -317,6 +328,57 @@ export default function HomeScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
         >
+          {/* Featured Partners Section */}
+          {data?.recommendedUsers && data.recommendedUsers.length > 0 && (
+            <View style={styles.featuredSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionHeaderTitle, { color: colors.text.primary }]}>
+                  Featured
+                </Text>
+                <TouchableOpacity>
+                  <Text style={[styles.seeAllText, { color: colors.primary }]}>See All</Text>
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                horizontal
+                data={data.recommendedUsers.slice(0, 5)}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.featuredCard, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}
+                    activeOpacity={0.8}
+                    onPress={() => router.push(`/partner/${item.id}`)}
+                  >
+                    <Image
+                      source={{
+                        uri: (item.avatar_url && item.avatar_url.trim() !== '') 
+                          ? item.avatar_url 
+                          : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+                      }}
+                      style={styles.featuredImage}
+                    />
+                    <View style={styles.featuredContent}>
+                      <Text style={[styles.featuredName, { color: colors.text.primary }]} numberOfLines={1}>
+                        {item.display_name}
+                      </Text>
+                      {item.languages && item.languages.length > 0 && (
+                        <View style={styles.featuredLanguages}>
+                          {item.languages.slice(0, 2).map((lang: any, idx: number) => (
+                            <Text key={idx} style={[styles.featuredLangFlag, { color: colors.text.muted }]}>
+                              {getLanguageFlag(lang.language)}
+                            </Text>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                )}
+                keyExtractor={(item) => `featured-${item.id}`}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.featuredList}
+              />
+            </View>
+          )}
+
           {/* Active Users Section */}
           {data?.activeUsers && data.activeUsers.length > 0 && (
             <View style={[styles.nearbySection, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
@@ -504,12 +566,27 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 2,
   },
-  welcomeText: {
+  greetingText: {
     fontSize: 14,
+    marginBottom: 2,
   },
   userName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 16,
+    gap: 12,
+  },
+  searchPlaceholder: {
+    flex: 1,
+    fontSize: 14,
   },
   headerActions: {
     flexDirection: 'row',
@@ -548,19 +625,20 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: 24,
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   countBadge: {
     width: 40,
@@ -808,6 +886,53 @@ const styles = StyleSheet.create({
   nearbyLanguage: {
     fontSize: 11,
     marginTop: 2,
+  },
+  featuredSection: {
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'transparent',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  sectionHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  featuredList: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  featuredCard: {
+    width: 160,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    marginRight: 12,
+  },
+  featuredImage: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#2A2A2A',
+  },
+  featuredContent: {
+    padding: 12,
+  },
+  featuredName: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  featuredLanguages: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  featuredLangFlag: {
+    fontSize: 16,
   },
   sessionMeta: {
     flexDirection: 'row',
