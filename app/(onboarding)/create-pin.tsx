@@ -9,12 +9,14 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 
+const { width } = Dimensions.get('window');
 const PIN_LENGTH = 4;
 
 export default function CreatePinScreen() {

@@ -14,13 +14,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme/ThemeProvider';
-import * as LocalAuthentication from 'expo-local-authentication';
+
+// Conditionally import LocalAuthentication
+let LocalAuthentication: any = null;
+try {
+  LocalAuthentication = require('expo-local-authentication');
+} catch {
+  // Module not available (e.g., in Expo Go)
+  console.log('expo-local-authentication not available');
+}
 
 export default function SetFingerprintScreen() {
   const { colors } = useTheme();
   const [isSettingUp, setIsSettingUp] = useState(false);
 
   const handleSetFingerprint = async () => {
+    if (!LocalAuthentication) {
+      // Skip if module not available
+      router.push('/(onboarding)/face-recognition');
+      return;
+    }
+
     setIsSettingUp(true);
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
@@ -43,6 +57,8 @@ export default function SetFingerprintScreen() {
       }
     } catch (error) {
       console.error('Fingerprint setup error:', error);
+      // Continue even on error
+      router.push('/(onboarding)/face-recognition');
     } finally {
       setIsSettingUp(false);
     }

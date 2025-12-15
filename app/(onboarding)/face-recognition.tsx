@@ -14,13 +14,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme/ThemeProvider';
-import * as LocalAuthentication from 'expo-local-authentication';
+
+// Conditionally import LocalAuthentication
+let LocalAuthentication: any = null;
+try {
+  LocalAuthentication = require('expo-local-authentication');
+} catch {
+  // Module not available (e.g., in Expo Go)
+  console.log('expo-local-authentication not available');
+}
 
 export default function FaceRecognitionScreen() {
   const { colors } = useTheme();
   const [isSettingUp, setIsSettingUp] = useState(false);
 
   const handleSetFaceRecognition = async () => {
+    if (!LocalAuthentication) {
+      // Skip if module not available
+      completeSetup();
+      return;
+    }
+
     setIsSettingUp(true);
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
@@ -44,6 +58,8 @@ export default function FaceRecognitionScreen() {
       }
     } catch (error) {
       console.error('Face recognition setup error:', error);
+      // Continue even on error
+      completeSetup();
     } finally {
       setIsSettingUp(false);
     }
