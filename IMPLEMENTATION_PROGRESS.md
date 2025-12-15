@@ -2,6 +2,15 @@
 
 ## ✅ Completed Steps
 
+### Step 0: Splash & Welcome Screens ✅
+- [x] Splash screen with clean white background
+- [x] TAALMEET logo centered
+- [x] Circular loading dots animation (8 dots)
+- [x] Welcome screen with dark background
+- [x] Phone mockup showing app preview
+- [x] Welcome message and tagline
+- [x] Time-based greeting in phone preview
+
 ### Step 1: Enhanced Onboarding Flow ✅
 - [x] Created onboarding-1.tsx - "Find Language Partners Nearby"
 - [x] Created onboarding-2.tsx - "Practice Through Real Conversations"
