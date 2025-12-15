@@ -14,20 +14,44 @@ import {
   Modal,
   Dimensions,
   Animated,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSessionDetail, useJoinSession } from '@/hooks/useSessions';
+import { useAuth } from '@/providers';
+import { getLanguageFlag } from '@/utils/languageFlags';
+// Date formatting utility functions
+const formatDate = (date: Date): string => {
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+};
+
+const formatTime = (date: Date): string => {
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  const displayMinutes = minutes.toString().padStart(2, '0');
+  return `${displayHours}:${displayMinutes} ${ampm}`;
+};
 
 const { width, height } = Dimensions.get('window');
 
 export default function SessionDetailScreen() {
   const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
   const [isVisible, setIsVisible] = useState(true);
   const slideAnim = React.useRef(new Animated.Value(height)).current;
+
+  // Fetch real session data
+  const { data: session, isLoading, error } = useSessionDetail(id, user?.id);
+  const joinSessionMutation = useJoinSession();
 
   React.useEffect(() => {
     Animated.spring(slideAnim, {
@@ -49,42 +73,67 @@ export default function SessionDetailScreen() {
     });
   };
 
-  // Mock session data - replace with actual data fetching
-  const session = {
-    id: id || '1',
-    title: 'English Conversation Practice',
-    description: 'Join us for a fun and relaxed English conversation session. All levels welcome!',
-    languageFlag: '🇬🇧',
-    level: 'intermediate',
-    date: 'March 15, 2024',
-    time: '7:00 PM',
-    duration: 60,
-    location: 'Central Park Cafe',
-    isVirtual: false,
-    venue: {
-      name: 'Central Park Cafe',
-      address: '123 Main Street',
-      city: 'Amsterdam',
-      photos: [],
-      amenities: ['WiFi', 'Parking', 'Wheelchair Accessible'],
-    },
-    organizer: {
-      name: 'Sarah Johnson',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100',
-      type: 'user',
-      verified: true,
-      hostingCount: 12,
-    },
-    totalAttendees: 8,
-    maxAttendees: 15,
-    price: 0,
-    currency: '€',
-    tags: ['conversation', 'beginner-friendly', 'social'],
-    isUserJoined: false,
-    externalSource: null,
+  const handleJoinSession = async () => {
+    if (!session || !user) return;
+    
+    try {
+      await joinSessionMutation.mutateAsync({
+        sessionId: session.id,
+        userId: user.id,
+      });
+      Alert.alert('Success', 'You have joined the session!');
+    } catch (error) {
+      // Error is handled by the mutation
+    }
   };
 
-  const spotsLeft = session.maxAttendees - session.totalAttendees;
+  // Show loading state
+  if (isLoading) {
+    return (
+      <Modal visible={isVisible} transparent animationType="none" onRequestClose={handleClose}>
+        <View style={styles.overlay}>
+          <View style={[styles.loadingContainer, { backgroundColor: colors.background.secondary }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.text.primary }]}>Loading session...</Text>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  // Show error state
+  if (error || !session) {
+    return (
+      <Modal visible={isVisible} transparent animationType="none" onRequestClose={handleClose}>
+        <View style={styles.overlay}>
+          <View style={[styles.errorContainer, { backgroundColor: colors.background.secondary }]}>
+            <Ionicons name="alert-circle" size={48} color={colors.text.muted} />
+            <Text style={[styles.errorTitle, { color: colors.text.primary }]}>Session Not Found</Text>
+            <Text style={[styles.errorText, { color: colors.text.muted }]}>
+              This session may have been deleted or doesn't exist.
+            </Text>
+            <TouchableOpacity
+              style={[styles.errorButton, { backgroundColor: colors.primary }]}
+              onPress={handleClose}
+            >
+              <Text style={styles.errorButtonText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  // Format session data for display
+  const sessionDate = session.starts_at ? new Date(session.starts_at) : null;
+  const formattedDate = sessionDate ? formatDate(sessionDate) : 'Date TBD';
+  const formattedTime = sessionDate ? formatTime(sessionDate) : 'Time TBD';
+  const endDate = session.ends_at ? new Date(session.ends_at) : null;
+  const duration = sessionDate && endDate 
+    ? Math.round((endDate.getTime() - sessionDate.getTime()) / (1000 * 60))
+    : 60;
+  const spotsLeft = (session.capacity || 0) - (session.participantCount || 0);
+  const languageFlag = session.language ? getLanguageFlag(session.language) : '🌍';
 
   const getLevelColor = (level: string) => {
     switch (level) {
@@ -99,7 +148,7 @@ export default function SessionDetailScreen() {
     }
   };
 
-  const levelColors = getLevelColor(session.level);
+  const levelColors = getLevelColor(session.level || 'intermediate');
 
   if (!isVisible) return null;
 
@@ -123,7 +172,7 @@ export default function SessionDetailScreen() {
                 <Image source={{ uri: session.venue.photos[0] }} style={styles.headerImageContent} />
               ) : (
                 <View style={styles.headerImagePlaceholder}>
-                  <Text style={styles.headerImageFlag}>{session.languageFlag}</Text>
+                  <Text style={styles.headerImageFlag}>{languageFlag}</Text>
                 </View>
               )}
 
@@ -142,13 +191,6 @@ export default function SessionDetailScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* External Source Badge */}
-              {session.externalSource === 'evento' && (
-                <View style={[styles.externalBadge, { backgroundColor: `${colors.primary}E6` }]}>
-                  <Ionicons name="sparkles" size={14} color="#FFFFFF" />
-                  <Text style={styles.externalBadgeText}>Via Evento</Text>
-                </View>
-              )}
             </View>
 
             {/* Scrollable Content */}
@@ -160,22 +202,26 @@ export default function SessionDetailScreen() {
               {/* Title & Language */}
               <View style={styles.titleSection}>
                 <View style={styles.titleHeader}>
-                  <Text style={styles.languageFlag}>{session.languageFlag}</Text>
-                  <View style={[styles.levelBadge, { backgroundColor: levelColors.bg }]}>
-                    <Text style={[styles.levelText, { color: levelColors.text }]}>
-                      {session.level.charAt(0).toUpperCase() + session.level.slice(1)}
-                    </Text>
-                  </View>
-                  {session.isVirtual && (
+                  <Text style={styles.languageFlag}>{languageFlag}</Text>
+                  {session.level && (
+                    <View style={[styles.levelBadge, { backgroundColor: levelColors.bg }]}>
+                      <Text style={[styles.levelText, { color: levelColors.text }]}>
+                        {session.level.charAt(0).toUpperCase() + session.level.slice(1)}
+                      </Text>
+                    </View>
+                  )}
+                  {session.is_online && (
                     <View style={[styles.virtualBadge, { backgroundColor: 'rgba(168,85,247,0.1)' }]}>
-                      <Text style={[styles.virtualText, { color: '#A855F7' }]}>Virtual</Text>
+                      <Text style={[styles.virtualText, { color: '#A855F7' }]}>Online</Text>
                     </View>
                   )}
                 </View>
-                <Text style={[styles.title, { color: colors.text.primary }]}>{session.title}</Text>
-                <Text style={[styles.description, { color: colors.text.muted }]}>
-                  {session.description}
-                </Text>
+                <Text style={[styles.title, { color: colors.text.primary }]}>{session.title || 'Language Session'}</Text>
+                {session.description && (
+                  <Text style={[styles.description, { color: colors.text.muted }]}>
+                    {session.description}
+                  </Text>
+                )}
               </View>
 
               {/* Quick Info Cards */}
@@ -185,8 +231,8 @@ export default function SessionDetailScreen() {
                     <Ionicons name="calendar-outline" size={16} color={colors.primary} />
                     <Text style={[styles.infoLabel, { color: colors.text.muted }]}>Date</Text>
                   </View>
-                  <Text style={[styles.infoValue, { color: colors.text.primary }]}>{session.date}</Text>
-                  <Text style={[styles.infoSubtext, { color: colors.text.muted }]}>{session.time}</Text>
+                  <Text style={[styles.infoValue, { color: colors.text.primary }]}>{formattedDate}</Text>
+                  <Text style={[styles.infoSubtext, { color: colors.text.muted }]}>{formattedTime}</Text>
                 </View>
 
                 <View style={[styles.infoCard, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}>
@@ -195,10 +241,10 @@ export default function SessionDetailScreen() {
                     <Text style={[styles.infoLabel, { color: colors.text.muted }]}>Duration</Text>
                   </View>
                   <Text style={[styles.infoValue, { color: colors.text.primary }]}>
-                    {session.duration} min
+                    {duration} min
                   </Text>
                   <Text style={[styles.infoSubtext, { color: colors.text.muted }]}>
-                    {Math.floor(session.duration / 60)}h {session.duration % 60}m
+                    {Math.floor(duration / 60)}h {duration % 60}m
                   </Text>
                 </View>
               </View>
@@ -206,7 +252,7 @@ export default function SessionDetailScreen() {
               {/* Location/Meeting Link */}
               <View style={[styles.locationCard, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}>
                 <View style={styles.locationHeader}>
-                  {session.isVirtual ? (
+                  {session.is_online ? (
                     <View style={[styles.locationIcon, { backgroundColor: 'rgba(168,85,247,0.1)' }]}>
                       <Ionicons name="videocam-outline" size={20} color="#A855F7" />
                     </View>
@@ -217,94 +263,47 @@ export default function SessionDetailScreen() {
                   )}
                   <View style={styles.locationContent}>
                     <Text style={[styles.locationLabel, { color: colors.text.muted }]}>
-                      {session.isVirtual ? 'Meeting Link' : 'Location'}
+                      {session.is_online ? 'Online Session' : 'Location'}
                     </Text>
                     <Text style={[styles.locationValue, { color: colors.text.primary }]}>
-                      {session.location}
+                      {session.location || (session.is_online ? 'Online' : 'Location TBD')}
                     </Text>
-                    {session.venue && (
-                      <Text style={[styles.locationAddress, { color: colors.text.muted }]}>
-                        {session.venue.address}, {session.venue.city}
-                      </Text>
-                    )}
                   </View>
-                  {session.isVirtual && session.isUserJoined && (
-                    <TouchableOpacity
-                      style={[styles.joinButton, { backgroundColor: colors.primary }]}
-                    >
-                      <Text style={styles.joinButtonText}>Join</Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
-
-                {/* Venue Amenities */}
-                {session.venue?.amenities && session.venue.amenities.length > 0 && (
-                  <View style={[styles.amenitiesSection, { borderTopColor: colors.border.default }]}>
-                    <View style={styles.amenitiesList}>
-                      {session.venue.amenities.map((amenity, index) => (
-                        <View
-                          key={index}
-                          style={[styles.amenityChip, { backgroundColor: colors.background.secondary }]}
-                        >
-                          <Text style={[styles.amenityText, { color: colors.text.muted }]}>
-                            {amenity}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
               </View>
 
-              {/* Organizer Card */}
-              <View style={[styles.organizerCard, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}>
-                <Text style={[styles.organizerLabel, { color: colors.text.muted }]}>
-                  {session.organizer.type === 'business' ? 'Organized by' : 'Hosted by'}
-                </Text>
-                <View style={styles.organizerContent}>
-                  <Image
-                    source={{ uri: session.organizer.avatar }}
-                    style={styles.organizerAvatar}
-                  />
-                  <View style={styles.organizerInfo}>
-                    <View style={styles.organizerNameRow}>
-                      <Text style={[styles.organizerName, { color: colors.text.primary }]}>
-                        {session.organizer.name}
-                      </Text>
-                      {session.organizer.verified && (
-                        <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
-                      )}
-                    </View>
-                    {session.organizer.type === 'business' ? (
-                      <View style={styles.organizerMeta}>
-                        <View style={styles.organizerMetaItem}>
-                          <Ionicons name="star" size={14} color="#F59E0B" />
-                          <Text style={[styles.organizerMetaText, { color: colors.text.muted }]}>
-                            {session.organizer.rating || '4.8'}
-                          </Text>
-                        </View>
-                        <Text style={[styles.organizerMetaText, { color: colors.text.muted }]}>
-                          {session.organizer.totalEvents || 0} events
+              {/* Organizer/Host Card */}
+              {session.host && (
+                <View style={[styles.organizerCard, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}>
+                  <Text style={[styles.organizerLabel, { color: colors.text.muted }]}>
+                    Hosted by
+                  </Text>
+                  <View style={styles.organizerContent}>
+                    <Image
+                      source={{ uri: session.host.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' }}
+                      style={styles.organizerAvatar}
+                    />
+                    <View style={styles.organizerInfo}>
+                      <View style={styles.organizerNameRow}>
+                        <Text style={[styles.organizerName, { color: colors.text.primary }]}>
+                          {session.host.display_name || 'Unknown'}
                         </Text>
                       </View>
-                    ) : (
-                      <Text style={[styles.organizerMetaText, { color: colors.text.muted }]}>
-                        {session.organizer.hostingCount} sessions hosted
-                      </Text>
-                    )}
+                      {session.host.bio && (
+                        <Text style={[styles.organizerMetaText, { color: colors.text.muted }]}>
+                          {session.host.bio}
+                        </Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.viewButton, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}
+                      onPress={() => router.push(`/partner/${session.host.id}`)}
+                    >
+                      <Text style={[styles.viewButtonText, { color: colors.text.primary }]}>View</Text>
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    style={[styles.viewButton, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}
-                  >
-                    <Text style={[styles.viewButtonText, { color: colors.text.primary }]}>View</Text>
-                  </TouchableOpacity>
                 </View>
-                {session.organizer.bio && (
-                  <Text style={[styles.organizerBio, { color: colors.text.muted }]}>
-                    {session.organizer.bio}
-                  </Text>
-                )}
-              </View>
+              )}
 
               {/* Attendees */}
               <View style={[styles.attendeesCard, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}>
@@ -312,7 +311,7 @@ export default function SessionDetailScreen() {
                   <View style={styles.attendeesHeaderLeft}>
                     <Ionicons name="people-outline" size={16} color="#5FB3B3" />
                     <Text style={[styles.attendeesCount, { color: colors.text.primary }]}>
-                      {session.totalAttendees} / {session.maxAttendees} Attendees
+                      {session.participantCount || 0} / {session.capacity || 0} Attendees
                     </Text>
                   </View>
                   {spotsLeft > 0 && (
@@ -323,7 +322,7 @@ export default function SessionDetailScreen() {
                 </View>
 
                 <View style={styles.attendeesAvatars}>
-                  {Array.from({ length: Math.min(8, session.totalAttendees) }).map((_, index) => (
+                  {Array.from({ length: Math.min(8, session.participantCount || 0) }).map((_, index) => (
                     <View
                       key={index}
                       style={[
@@ -338,7 +337,7 @@ export default function SessionDetailScreen() {
                       </View>
                     </View>
                   ))}
-                  {session.totalAttendees - 8 > 0 && (
+                  {(session.participantCount || 0) - 8 > 0 && (
                     <View
                       style={[
                         styles.attendeeAvatar,
@@ -348,7 +347,7 @@ export default function SessionDetailScreen() {
                       ]}
                     >
                       <Text style={styles.attendeeAvatarMoreText}>
-                        +{session.totalAttendees - 8}
+                        +{(session.participantCount || 0) - 8}
                       </Text>
                     </View>
                   )}
@@ -364,47 +363,14 @@ export default function SessionDetailScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Tags */}
-              {session.tags && session.tags.length > 0 && (
-                <View style={styles.tagsSection}>
-                  <Text style={[styles.tagsLabel, { color: colors.text.muted }]}>Tags</Text>
-                  <View style={styles.tagsList}>
-                    {session.tags.map((tag, index) => (
-                      <View
-                        key={index}
-                        style={[styles.tagChip, { backgroundColor: colors.background.primary, borderColor: colors.border.default }]}
-                      >
-                        <Text style={[styles.tagText, { color: colors.text.primary }]}>#{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              {/* Price */}
-              <View style={[styles.priceCard, { backgroundColor: `${colors.primary}20`, borderColor: `${colors.primary}40` }]}>
-                <View style={styles.priceContent}>
-                  <View>
-                    <Text style={[styles.priceLabel, { color: colors.text.muted }]}>Price</Text>
-                    <Text style={[styles.priceValue, { color: colors.text.primary }]}>
-                      {session.price === 0
-                        ? 'Free'
-                        : `${session.currency} ${session.price}`}
-                    </Text>
-                  </View>
-                  {session.price === 0 && (
-                    <View style={[styles.freeBadge, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.freeBadgeText}>Free Event</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
 
               {/* Action Buttons */}
               <View style={styles.actionButtons}>
                 <TouchableOpacity
                   style={[styles.joinSessionButton, { backgroundColor: colors.primary }]}
                   activeOpacity={0.8}
+                  onPress={handleJoinSession}
+                  disabled={joinSessionMutation.isPending || session.currentUserParticipating || session.isFull}
                 >
                   <LinearGradient
                     colors={[colors.primary, '#1ED760']}
@@ -413,7 +379,13 @@ export default function SessionDetailScreen() {
                     style={styles.joinSessionGradient}
                   >
                     <Text style={styles.joinSessionButtonText}>
-                      {session.isUserJoined ? 'Joined ✓' : 'Join Session'}
+                      {joinSessionMutation.isPending
+                        ? 'Joining...'
+                        : session.currentUserParticipating
+                        ? 'Joined ✓'
+                        : session.isFull
+                        ? 'Full'
+                        : 'Join Session'}
                     </Text>
                   </LinearGradient>
                 </TouchableOpacity>
@@ -836,6 +808,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    borderRadius: 24,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    borderRadius: 24,
+    maxWidth: width * 0.8,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  errorButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  errorButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

@@ -17,10 +17,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import { useAuth } from '@/providers';
 import { useDiscoverFeed } from '@/hooks/useDiscover';
-import { useLanguageEvents } from '@/hooks/useEventbriteEvents';
+import { useUserLanguageEvents } from '@/hooks/useEventbriteEvents';
 import { EventCard } from '@/components/events/EventCard';
 import { EventHorizontalCard } from '@/components/events/EventHorizontalCard';
 import { getLanguageFlag } from '@/utils/languageFlags';
@@ -74,15 +75,36 @@ export default function HomeScreen() {
 
   // Fetch discover feed
   const { data, isLoading, error, refetch } = useDiscoverFeed(activeFilters);
+  
+  // Debug logging
+  useEffect(() => {
+    if (data) {
+      console.log('Discover feed data:', {
+        activeUsers: data.activeUsers?.length || 0,
+        recommendedUsers: data.recommendedUsers?.length || 0,
+        newUsers: data.newUsers?.length || 0,
+        sessions: data.sessions?.length || 0,
+      });
+    }
+    if (error) {
+      console.error('Discover feed error:', error);
+    }
+  }, [data, error]);
 
-  // Fetch Eventbrite events for selected language
+  // Fetch general language-related events based on user's profile country
+  // Use country from profile (e.g., "Netherlands") for location-based search
+  const userCountry = profile?.country || undefined;
+  
   const {
     data: events = [],
     isLoading: eventsLoading,
-  } = useLanguageEvents({
-    language: selectedLanguage === 'All' ? 'Spanish' : selectedLanguage, // Default to Spanish if All
-    enabled: selectedLanguage !== 'All', // Only fetch when a specific language is selected
+  } = useUserLanguageEvents({
+    location: userCountry, // Use country for location-based search
+    onlineOnly: false, // Include both online and offline events
   });
+
+  // Show all language-related events (no language-specific filtering)
+  const filteredEvents = events;
 
   // Handle refresh
   const handleRefresh = async () => {
@@ -346,25 +368,49 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Eventbrite Events Horizontal Section */}
-          {selectedLanguage !== 'All' && events.length > 0 && (
-            <View style={[styles.nearbySection, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
+          {/* Eventbrite Events Section - Based on User Profile */}
+          {/* Show section with "View on Eventbrite" button to open web search */}
+          <View style={[styles.nearbySection, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
+            <View style={styles.eventsHeader}>
               <Text style={[styles.nearbySectionTitle, { color: colors.text.primary }]}>
-                {selectedLanguage} Events <Text style={{ color: colors.text.muted }}>({events.length})</Text>
+                Language Exchange Events
               </Text>
+              <TouchableOpacity
+                style={[styles.viewMoreButton, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  // Open Eventbrite search URL with language exchange query and user's country
+                  const searchQuery = 'language exchange';
+                  const location = userCountry || 'Netherlands';
+                  const eventbriteUrl = `https://www.eventbrite.com/d/${encodeURIComponent(location)}/${encodeURIComponent(searchQuery)}/`;
+                  Linking.openURL(eventbriteUrl);
+                }}
+              >
+                <Text style={styles.viewMoreText}>View on Eventbrite</Text>
+                <Ionicons name="open-outline" size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            
+            {filteredEvents.length > 0 ? (
               <FlatList
                 horizontal
-                data={events}
+                data={filteredEvents}
                 renderItem={({ item }) => <EventHorizontalCard event={item} />}
                 keyExtractor={(item) => `eventbrite-horizontal-${item.id}`}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.nearbyList}
               />
-            </View>
-          )}
+            ) : (
+              <View style={styles.noEventsContainer}>
+                <Ionicons name="calendar-outline" size={32} color={colors.text.muted} />
+                <Text style={[styles.noEventsText, { color: colors.text.muted }]}>
+                  Tap "View on Eventbrite" to see language exchange events in {userCountry || 'your area'}
+                </Text>
+              </View>
+            )}
+          </View>
 
           {/* Sessions & Events Section */}
-          {((data?.sessions && data.sessions.length > 0) || (selectedLanguage !== 'All' && events.length > 0)) && (
+          {((data?.sessions && data.sessions.length > 0) || filteredEvents.length > 0) && (
             <View style={styles.sessionsContainer}>
               <View style={styles.languageSection}>
                 <View style={styles.languageHeader}>
@@ -373,15 +419,15 @@ export default function HomeScreen() {
                   </Text>
                   <View style={[styles.countBadge, { backgroundColor: colors.background.primary }]}>
                     <Text style={[styles.countText, { color: colors.text.primary }]}>
-                      ({(data?.sessions?.length || 0) + (selectedLanguage !== 'All' ? events.length : 0)})
+                      ({(data?.sessions?.length || 0) + filteredEvents.length})
                     </Text>
                   </View>
                 </View>
                 
                 {/* Show Eventbrite Events first */}
-                {selectedLanguage !== 'All' && events.length > 0 && (
+                {filteredEvents.length > 0 && (
                   <>
-                    {events.map((event) => (
+                    {filteredEvents.map((event) => (
                       <EventCard key={`eventbrite-${event.id}`} event={event} />
                     ))}
                   </>
@@ -398,18 +444,18 @@ export default function HomeScreen() {
           )}
 
           {/* Empty State */}
-          {(!data || 
-            (data.activeUsers.length === 0 &&
-              data.recommendedUsers.length === 0 &&
-              data.newUsers.length === 0 &&
-              data.sessions.length === 0 &&
-              (selectedLanguage === 'All' || events.length === 0))) && (
+          {(!isLoading && !error && (!data || 
+            ((data.activeUsers?.length || 0) === 0 &&
+              (data.recommendedUsers?.length || 0) === 0 &&
+              (data.newUsers?.length || 0) === 0 &&
+              (data.sessions?.length || 0) === 0 &&
+              filteredEvents.length === 0))) && (
             <View style={styles.emptyContainer}>
               <Ionicons name="search-outline" size={64} color={colors.text.muted} />
               <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>No content available</Text>
               <Text style={[styles.emptySubtext, { color: colors.text.muted }]}>
                 {selectedLanguage !== 'All'
-                  ? `No ${selectedLanguage} sessions, events, or users found. Try a different language.`
+                  ? `No ${selectedLanguage === 'All' ? '' : selectedLanguage + ' '}sessions, events, or users found. Try a different language or check back later.`
                   : 'Check back later for new users and sessions!'}
               </Text>
             </View>
@@ -552,6 +598,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     paddingHorizontal: 16,
     marginBottom: 12,
+  },
+  eventsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  viewMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  viewMoreText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  noEventsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+  },
+  noEventsText: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 18,
   },
   nearbyList: {
     paddingHorizontal: 16,

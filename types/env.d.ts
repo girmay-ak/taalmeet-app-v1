@@ -7,7 +7,6 @@ declare module '@env' {
   export const SUPABASE_SERVICE_KEY: string;
   export const API_TIMEOUT: string;
   export const ENABLE_LOGGING: string;
-  export const ENABLE_MOCK_DATA: string;
   export const ENABLE_ANALYTICS: string;
   export const ENABLE_CRASH_REPORTING: string;
   export const ENABLE_PUSH_NOTIFICATIONS: string;
