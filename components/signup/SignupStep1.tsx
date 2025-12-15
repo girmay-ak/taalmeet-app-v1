@@ -59,11 +59,13 @@ export function SignupStep1({ onNext, onBack }: SignupStep1Props) {
     { label: '1 number', valid: /[0-9]/.test(password) },
   ];
 
-  const canProceed = name && email && password.length >= 8 && password === confirmPassword;
+  const canProceed = email && password.length >= 8;
 
   const handleSubmit = () => {
     if (canProceed) {
-      onNext({ name, email, password });
+      // Use email prefix as name if name not provided
+      const displayName = name || email.split('@')[0];
+      onNext({ name: displayName, email, password });
     }
   };
 
@@ -89,46 +91,20 @@ export function SignupStep1({ onNext, onBack }: SignupStep1Props) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Title */}
-          <Text style={[styles.title, { color: colors.text.primary }]}>
-            Create Account 🎉
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.text.muted }]}>
-            Let's get started!
-          </Text>
-
-          {/* Full Name */}
-          <View style={styles.inputSection}>
-            <Text style={[styles.label, { color: colors.text.primary }]}>Full Name</Text>
-            <View
-              style={[
-                styles.inputContainer,
-                {
-                  backgroundColor: colors.background.secondary,
-                  borderColor: colors.border.default,
-                },
-              ]}
-            >
-              <Ionicons
-                name="person-outline"
-                size={20}
-                color={colors.text.muted}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={[styles.input, { color: colors.text.primary }]}
-                placeholder="John Smith"
-                placeholderTextColor={colors.text.muted}
-                value={name}
-                onChangeText={setName}
-                autoCapitalize="words"
-              />
+          {/* Logo */}
+          <View style={styles.logoContainer}>
+            <View style={[styles.logoWrapper, { backgroundColor: colors.primary }]}>
+              <Text style={styles.logoText}>TM</Text>
             </View>
           </View>
 
+          {/* Title */}
+          <Text style={[styles.title, { color: colors.text.primary }]}>
+            Create New Account
+          </Text>
+
           {/* Email */}
           <View style={styles.inputSection}>
-            <Text style={[styles.label, { color: colors.text.primary }]}>Email</Text>
             <View
               style={[
                 styles.inputContainer,
@@ -138,15 +114,9 @@ export function SignupStep1({ onNext, onBack }: SignupStep1Props) {
                 },
               ]}
             >
-              <Ionicons
-                name="mail-outline"
-                size={20}
-                color={colors.text.muted}
-                style={styles.inputIcon}
-              />
               <TextInput
                 style={[styles.input, { color: colors.text.primary }]}
-                placeholder="john@example.com"
+                placeholder="Email"
                 placeholderTextColor={colors.text.muted}
                 value={email}
                 onChangeText={setEmail}
@@ -159,7 +129,6 @@ export function SignupStep1({ onNext, onBack }: SignupStep1Props) {
 
           {/* Password */}
           <View style={styles.inputSection}>
-            <Text style={[styles.label, { color: colors.text.primary }]}>Password</Text>
             <View
               style={[
                 styles.inputContainer,
@@ -169,15 +138,9 @@ export function SignupStep1({ onNext, onBack }: SignupStep1Props) {
                 },
               ]}
             >
-              <Ionicons
-                name="lock-closed-outline"
-                size={20}
-                color={colors.text.muted}
-                style={styles.inputIcon}
-              />
               <TextInput
                 style={[styles.input, { color: colors.text.primary }]}
-                placeholder="••••••••"
+                placeholder="Password"
                 placeholderTextColor={colors.text.muted}
                 value={password}
                 onChangeText={setPassword}
@@ -195,107 +158,20 @@ export function SignupStep1({ onNext, onBack }: SignupStep1Props) {
                 />
               </TouchableOpacity>
             </View>
+          </View>
 
-            {/* Password Strength */}
-            {password.length > 0 && (
-              <View style={styles.strengthContainer}>
-                <View style={styles.strengthHeader}>
-                  <Text style={[styles.strengthLabel, { color: colors.text.muted }]}>
-                    Password strength:
-                  </Text>
-                  <Text style={[styles.strengthValue, { color: strengthInfo.color }]}>
-                    {strengthInfo.label} 💪
-                  </Text>
-                </View>
-                <View
-                  style={[styles.strengthBar, { backgroundColor: colors.background.tertiary }]}
-                >
-                  <View
-                    style={[
-                      styles.strengthProgress,
-                      { width: `${passwordStrength}%`, backgroundColor: strengthInfo.color },
-                    ]}
-                  />
-                </View>
-                <View style={styles.checksContainer}>
-                  {checks.map((check) => (
-                    <View key={check.label} style={styles.checkItem}>
-                      <View
-                        style={[
-                          styles.checkCircle,
-                          {
-                            backgroundColor: check.valid
-                              ? '#10B981'
-                              : colors.background.tertiary,
-                          },
-                        ]}
-                      >
-                        {check.valid && (
-                          <Ionicons name="checkmark" size={12} color="#FFFFFF" />
-                        )}
-                      </View>
-                      <Text
-                        style={[
-                          styles.checkLabel,
-                          { color: check.valid ? '#10B981' : colors.text.muted },
-                        ]}
-                      >
-                        {check.label}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
+          {/* Remember Me */}
+          <View style={styles.rememberMeContainer}>
+            <TouchableOpacity style={styles.checkboxContainer}>
+              <View style={[styles.checkbox, { borderColor: colors.border.default }]}>
               </View>
-            )}
+              <Text style={[styles.rememberMeText, { color: colors.text.secondary }]}>
+                Remember me
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Confirm Password */}
-          <View style={styles.inputSection}>
-            <Text style={[styles.label, { color: colors.text.primary }]}>Confirm Password</Text>
-            <View
-              style={[
-                styles.inputContainer,
-                {
-                  backgroundColor: colors.background.secondary,
-                  borderColor:
-                    confirmPassword && password !== confirmPassword
-                      ? '#EF4444'
-                      : colors.border.default,
-                },
-              ]}
-            >
-              <Ionicons
-                name="lock-closed-outline"
-                size={20}
-                color={colors.text.muted}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={[styles.input, { color: colors.text.primary }]}
-                placeholder="••••••••"
-                placeholderTextColor={colors.text.muted}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirm}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                onPress={() => setShowConfirm(!showConfirm)}
-                style={styles.eyeIcon}
-              >
-                <Ionicons
-                  name={showConfirm ? 'eye-outline' : 'eye-off-outline'}
-                  size={20}
-                  color={colors.text.muted}
-                />
-              </TouchableOpacity>
-            </View>
-            {confirmPassword && password !== confirmPassword && (
-              <Text style={styles.errorText}>Passwords don't match</Text>
-            )}
-          </View>
-
-          {/* Submit Button */}
+          {/* Sign Up Button */}
           <TouchableOpacity
             style={[
               styles.submitButton,
@@ -304,8 +180,36 @@ export function SignupStep1({ onNext, onBack }: SignupStep1Props) {
             onPress={handleSubmit}
             disabled={!canProceed}
           >
-            <Text style={styles.submitButtonText}>Next →</Text>
+            <Text style={styles.submitButtonText}>Sign up</Text>
           </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={[styles.dividerLine, { backgroundColor: colors.border.default }]} />
+            <Text style={[styles.dividerText, { color: colors.text.secondary }]}>
+              or continue with
+            </Text>
+            <View style={[styles.dividerLine, { backgroundColor: colors.border.default }]} />
+          </View>
+
+          {/* Social Login Icons */}
+          <View style={styles.socialIconsContainer}>
+            <TouchableOpacity
+              style={[styles.socialIconButton, { backgroundColor: colors.background.secondary }]}
+            >
+              <Ionicons name="logo-facebook" size={24} color="#1877F2" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.socialIconButton, { backgroundColor: colors.background.secondary }]}
+            >
+              <Text style={styles.googleG}>G</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.socialIconButton, { backgroundColor: colors.background.secondary }]}
+            >
+              <Ionicons name="logo-apple" size={24} color={colors.text.primary} />
+            </TouchableOpacity>
+          </View>
 
           {/* Login Link */}
           <View style={styles.loginLink}>
@@ -313,7 +217,7 @@ export function SignupStep1({ onNext, onBack }: SignupStep1Props) {
               Already have an account?{' '}
             </Text>
             <TouchableOpacity onPress={onBack}>
-              <Text style={[styles.loginLinkText, { color: colors.primary }]}>Log In</Text>
+              <Text style={[styles.loginLinkText, { color: colors.primary }]}>Sign in</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -349,17 +253,24 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 8,
   },
-  subtitle: {
-    fontSize: 16,
-    marginBottom: 24,
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  logoWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   inputSection: {
     marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -423,10 +334,53 @@ const styles = StyleSheet.create({
   checkLabel: {
     fontSize: 14,
   },
-  errorText: {
-    color: '#EF4444',
+  rememberMeContainer: {
+    marginBottom: 24,
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  rememberMeText: {
     fontSize: 14,
-    marginTop: 8,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    paddingHorizontal: 16,
+    fontSize: 14,
+  },
+  socialIconsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginBottom: 24,
+  },
+  socialIconButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleG: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4285F4',
   },
   submitButton: {
     height: 56,

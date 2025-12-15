@@ -19,7 +19,7 @@ import { Link } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Ionicons } from '@expo/vector-icons';
-import { FlowingWavesRN } from '@/components';
+import { FlowingWavesRN, TaalMeetLogo } from '@/components';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import { useSignIn } from '@/hooks/useAuth';
 import { signInSchema, type SignInInput } from '@/utils/validators';
@@ -65,32 +65,35 @@ export default function SignInScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           
+          {/* Back Button */}
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+          </TouchableOpacity>
+
           {/* Logo & Header */}
           <View style={styles.header}>
             <View style={[styles.logoContainer, { backgroundColor: colors.primary }]}>
-              <Text style={styles.logoText}>💬</Text>
+              <TaalMeetLogo size={60} />
             </View>
             <Text style={[styles.title, { color: colors.text.primary }]}>
-              Welcome to TaalMeet
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.text.secondary }]}>
-              Meet. Speak. Connect.
+              Login to Your Account
             </Text>
           </View>
 
           {/* Email Input */}
           <View style={styles.inputSection}>
-            <Text style={[styles.label, { color: colors.text.primary }]}>Email</Text>
             <Controller
               control={control}
               name="email"
               render={({ field: { onChange, onBlur, value } }) => (
                 <View>
-                  <View style={[styles.inputContainer, { backgroundColor: colors.background.secondary, borderColor: errors.email ? colors.semantic.error : colors.border.default }]}>
-                    <Ionicons name="mail-outline" size={20} color={colors.text.muted} style={styles.inputIcon} />
+                  <View style={[styles.inputContainer, { backgroundColor: colors.background.secondary, borderColor: errors.email ? colors.semantic?.error || '#FF0000' : colors.border.default }]}>
                     <TextInput
                       style={[styles.input, { color: colors.text.primary }]}
-                      placeholder="your@email.com"
+                      placeholder="Email"
                       placeholderTextColor={colors.text.muted}
                       value={value}
                       onChangeText={onChange}
@@ -101,7 +104,7 @@ export default function SignInScreen() {
                     />
                   </View>
                   {errors.email && (
-                    <Text style={[styles.errorText, { color: colors.semantic.error }]}>
+                    <Text style={[styles.errorText, { color: colors.semantic?.error || '#FF0000' }]}>
                       {errors.email.message}
                     </Text>
                   )}
@@ -112,17 +115,15 @@ export default function SignInScreen() {
 
           {/* Password Input */}
           <View style={styles.inputSection}>
-            <Text style={[styles.label, { color: colors.text.primary }]}>Password</Text>
             <Controller
               control={control}
               name="password"
               render={({ field: { onChange, onBlur, value } }) => (
                 <View>
-                  <View style={[styles.inputContainer, { backgroundColor: colors.background.secondary, borderColor: errors.password ? colors.semantic.error : colors.border.default }]}>
-                    <Ionicons name="lock-closed-outline" size={20} color={colors.text.muted} style={styles.inputIcon} />
+                  <View style={[styles.inputContainer, { backgroundColor: colors.background.secondary, borderColor: errors.password ? colors.semantic?.error || '#FF0000' : colors.border.default }]}>
                     <TextInput
                       style={[styles.input, { color: colors.text.primary }]}
-                      placeholder="Enter your password"
+                      placeholder="Password"
                       placeholderTextColor={colors.text.muted}
                       value={value}
                       onChangeText={onChange}
@@ -139,7 +140,7 @@ export default function SignInScreen() {
                     </TouchableOpacity>
                   </View>
                   {errors.password && (
-                    <Text style={[styles.errorText, { color: colors.semantic.error }]}>
+                    <Text style={[styles.errorText, { color: colors.semantic?.error || '#FF0000' }]}>
                       {errors.password.message}
                     </Text>
                   )}
@@ -155,7 +156,18 @@ export default function SignInScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Log In Button */}
+          {/* Remember Me Checkbox */}
+          <View style={styles.rememberMeContainer}>
+            <TouchableOpacity style={styles.checkboxContainer}>
+              <View style={[styles.checkbox, { borderColor: colors.border.default }]}>
+              </View>
+              <Text style={[styles.rememberMeText, { color: colors.text.secondary }]}>
+                Remember me
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Sign In Button */}
           <TouchableOpacity
             style={[styles.loginButton, { backgroundColor: colors.primary }]}
             onPress={handleSubmit(onSubmit)}
@@ -163,7 +175,7 @@ export default function SignInScreen() {
             {signInMutation.isPending ? (
               <Text style={styles.loginButtonText}>Signing In...</Text>
             ) : (
-              <Text style={styles.loginButtonText}>Log In</Text>
+              <Text style={styles.loginButtonText}>Sign in</Text>
             )}
           </TouchableOpacity>
 
@@ -228,7 +240,13 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: 24,
-    paddingTop: 40,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   header: {
     alignItems: 'center',
@@ -256,11 +274,6 @@ const styles = StyleSheet.create({
   inputSection: {
     marginBottom: 20,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -269,12 +282,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 56,
   },
-  inputIcon: {
-    marginRight: 12,
-  },
   input: {
     flex: 1,
     fontSize: 16,
+  },
+  rememberMeContainer: {
+    marginBottom: 24,
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  rememberMeText: {
+    fontSize: 14,
   },
   eyeIcon: {
     padding: 4,
