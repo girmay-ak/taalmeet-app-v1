@@ -6,7 +6,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { FlowingWavesRN } from '@/components';
+import { FlowingWavesRN, TaalMeetLogo } from '@/components';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 
 export default function WelcomeScreen() {
@@ -22,8 +22,8 @@ export default function WelcomeScreen() {
 
       <View style={styles.content}>
         {/* Logo */}
-        <View style={[styles.logoContainer, { backgroundColor: colors.primary }]}>
-          <Text style={styles.logoText}>💬</Text>
+        <View style={styles.logoContainer}>
+          <TaalMeetLogo size={80} variant="icon" />
         </View>
 
         {/* Title */}
@@ -97,13 +97,9 @@ const styles = StyleSheet.create({
   logoContainer: {
     width: 80,
     height: 80,
-    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
-  },
-  logoText: {
-    fontSize: 40,
   },
   title: {
     fontSize: 28,

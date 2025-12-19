@@ -7,9 +7,18 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { FlowingWavesRN, TaalMeetLogo } from '@/components';
 import { useTheme } from '@/lib/theme/ThemeProvider';
 import { spacing, textStyles } from '@/lib/theme';
+
+// Logo brand colors
+const LOGO_COLORS = {
+  darkBlue: '#1E3A5F',
+  goldenYellow: '#FFB800',
+  teal: '#4FD1C5',
+  tealDark: '#2A9D8F',
+};
 
 export default function SplashScreen() {
   const { colors } = useTheme();
@@ -59,7 +68,11 @@ export default function SplashScreen() {
   }, []);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+    <LinearGradient
+      colors={[LOGO_COLORS.darkBlue, LOGO_COLORS.tealDark, LOGO_COLORS.darkBlue]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.container}>
       {/* Animated Background */}
       <View style={styles.backgroundWaves}>
         <FlowingWavesRN />
@@ -74,12 +87,20 @@ export default function SplashScreen() {
             opacity: opacityAnim,
           },
         ]}>
-        {/* Glow Effect */}
+        {/* Glow Effect with logo colors */}
         <View
           style={[
             styles.glowRing,
             {
-              backgroundColor: colors.primary + '66', // 40% opacity
+              backgroundColor: LOGO_COLORS.teal + '66', // 40% opacity
+            },
+          ]}
+        />
+        <View
+          style={[
+            styles.glowRing2,
+            {
+              backgroundColor: LOGO_COLORS.goldenYellow + '33', // 20% opacity
             },
           ]}
         />
@@ -99,19 +120,19 @@ export default function SplashScreen() {
             transform: [{ translateY: textTranslateAnim }],
           },
         ]}>
-        <Text style={[styles.appName, { color: colors.text.primary }]}>
+        <Text style={[styles.appName, { color: '#FFFFFF' }]}>
           TaalMeet
         </Text>
-        <Text style={[styles.tagline, { color: colors.text.muted }]}>
+        <Text style={[styles.tagline, { color: LOGO_COLORS.teal }]}>
           Meet. Speak. Connect.
         </Text>
       </Animated.View>
 
       {/* Version */}
-      <Text style={[styles.version, { color: colors.text.muted }]}>
+      <Text style={[styles.version, { color: LOGO_COLORS.teal + 'CC' }]}>
         Version 1.0.0
       </Text>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -139,6 +160,13 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 40,
     opacity: 0.4,
+  },
+  glowRing2: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 50,
+    opacity: 0.3,
   },
   logoCard: {
     width: 100,

@@ -70,6 +70,9 @@ export { DiscoveryFiltersModal } from './discovery/DiscoveryFiltersModal';
 // Chat
 export { TranslationButton, MessageTranslation } from './chat/TranslationButton';
 
+// Logo Component (New Design)
+export { TaalMeetLogo, TaalMeetIcon } from './logo/TaalMeetLogo';
+
 // Icons
 export * from './icons';
 

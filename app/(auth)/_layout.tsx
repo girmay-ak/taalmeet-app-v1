@@ -13,6 +13,8 @@ export default function AuthLayout() {
         headerShown: false,
         animation: 'slide_from_right',
       }}>
+      <Stack.Screen name="landing" />
+      <Stack.Screen name="lets-you-in" />
       <Stack.Screen name="sign-in" />
       <Stack.Screen name="sign-up" />
     </Stack>

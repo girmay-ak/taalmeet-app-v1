@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/providers';
 import { useTheme } from '@/lib/theme/ThemeProvider';
+import { TaalMeetLogo } from '@/components';
 
 export default function Index() {
   const { colors } = useTheme();
@@ -14,8 +15,8 @@ export default function Index() {
         // User is logged in, redirect to main app
         router.replace('/(tabs)');
       } else {
-        // User is not logged in, redirect to sign in
-        router.replace('/(auth)/sign-in');
+        // User is not logged in, redirect to landing page
+        router.replace('/(auth)/landing');
       }
     }
   }, [session, loading]);
@@ -29,18 +30,13 @@ export default function Index() {
         alignItems: 'center',
         justifyContent: 'center',
       }}>
-      <Text
-        style={{
-          fontSize: 48,
-          marginBottom: 16,
-        }}>
-        🌍
-      </Text>
+      <TaalMeetLogo size={80} variant="icon" />
       <Text
         style={{
           fontSize: 32,
           fontWeight: 'bold',
           color: colors.text.primary,
+          marginTop: 24,
           marginBottom: 24,
         }}>
         TAALMEET

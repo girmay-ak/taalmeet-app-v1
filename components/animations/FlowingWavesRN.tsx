@@ -42,16 +42,9 @@ export function FlowingWavesRN() {
   }, []);
 
   return (
-    <View style={StyleSheet.absoluteFill}>
-      {/* Background Gradient */}
-      <LinearGradient
-        colors={['#0A4D3C', colors.background.primary, colors.background.secondary]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
 
-      {/* Animated Glow Circles */}
+      {/* Animated Glow Circles - Logo colors */}
       <Animated.View
         style={[
           styles.glowCircle,
@@ -59,7 +52,7 @@ export function FlowingWavesRN() {
           {
             opacity: fadeAnim,
             transform: [{ scale: scaleAnim }],
-            backgroundColor: colors.primary + '40', // 40 = 25% opacity in hex
+            backgroundColor: '#4FD1C540', // Teal with 25% opacity
           },
         ]}
       />
@@ -70,7 +63,7 @@ export function FlowingWavesRN() {
           {
             opacity: fadeAnim,
             transform: [{ scale: scaleAnim }],
-            backgroundColor: colors.secondary + '40',
+            backgroundColor: '#FFB80040', // Golden yellow with 25% opacity
           },
         ]}
       />

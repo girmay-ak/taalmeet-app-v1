@@ -115,61 +115,11 @@ export function AppleIcon({ size = 24, color = '#FFFFFF', style }: IconProps) {
 
 /**
  * TaalMeet Logo Component
- * Based on logo-simple.svg - Speech bubbles with TM letters
+ * NOTE: This old logo has been replaced with the new design.
+ * The new logo is exported from components/logo/TaalMeetLogo.tsx
+ * This export is kept for backward compatibility but will be removed in future versions.
+ * 
+ * @deprecated Use TaalMeetLogo from '@/components' instead
  */
-let logoIdCounter = 0;
-
-export function TaalMeetLogo({ size = 80, style }: { size?: number; style?: ViewStyle }) {
-  // Use a stable, unique gradient ID per component instance
-  const gradientId = useMemo(() => {
-    logoIdCounter += 1;
-    return `taalmeet-logo-gradient-${logoIdCounter}`;
-  }, []);
-  
-  return (
-    <View style={[{ width: size, height: size, position: 'relative', alignItems: 'center', justifyContent: 'center' }, style]}>
-      <Svg width={size} height={size} viewBox="0 0 48 48">
-        <Defs>
-          <LinearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#1DB954" stopOpacity="1" />
-            <Stop offset="1" stopColor="#5FB3B3" stopOpacity="1" />
-          </LinearGradient>
-        </Defs>
-        
-        {/* Speech Bubbles Overlap */}
-        <Circle cx="16" cy="20" r="12" fill={`url(#${gradientId})`} opacity="0.9"/>
-        <Circle cx="32" cy="28" r="12" fill="#4FD1C5"/>
-        
-        {/* Connection Line */}
-        <Line x1="20" y1="24" x2="28" y2="24" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-      </Svg>
-      
-      {/* Letters T and M - Overlaid as React Native Text */}
-      <RNText
-        style={{
-          position: 'absolute',
-          left: size * 0.27,
-          top: size * 0.42,
-          fontSize: size * 0.21,
-          fontWeight: 'bold',
-          color: 'white',
-          textAlign: 'center',
-        }}>
-        T
-      </RNText>
-      <RNText
-        style={{
-          position: 'absolute',
-          left: size * 0.60,
-          top: size * 0.58,
-          fontSize: size * 0.21,
-          fontWeight: 'bold',
-          color: 'white',
-          textAlign: 'center',
-        }}>
-        M
-      </RNText>
-    </View>
-  );
-}
+// Old logo removed - use the new logo from components/logo/TaalMeetLogo.tsx
 
