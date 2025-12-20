@@ -1,11 +1,23 @@
-# TaalMeet App - Root Makefile
-# Commands for mobile app, web app, and shared tasks
-
-.PHONY: help mobile web web-app install-mobile install-web dev-mobile dev-web build-mobile build-web clean start start-web
+.PHONY: install start ios android lint format typecheck build-dev build-preview build-prod prebuild clean help
 
 # Default target
 help:
-	@echo "TaalMeet App - Available Commands:"
+	@echo "TAALMEET - Available Commands"
+	@echo "=============================="
+	@echo "  make install       - Install dependencies"
+	@echo "  make start         - Start Expo development server (use with Expo Go)"
+	@echo "  make ios           - Run on iOS simulator"
+	@echo "  make android       - Run on Android emulator (requires Android SDK)"
+	@echo "  make lint          - Run ESLint"
+	@echo "  make lint-fix      - Fix ESLint errors"
+	@echo "  make format        - Format code with Prettier"
+	@echo "  make format-check  - Check code formatting"
+	@echo "  make typecheck     - Run TypeScript type checking"
+	@echo "  make build-dev     - Build development bundle"
+	@echo "  make build-preview - Build preview bundle"
+	@echo "  make build-prod    - Build production bundle"
+	@echo "  make prebuild      - Generate native code"
+	@echo "  make clean         - Clean build artifacts"
 	@echo ""
 	@echo "📱 Mobile App (React Native/Expo):"
 	@echo "  make start           - Start mobile app development server (default)"
@@ -54,13 +66,9 @@ install-web:
 	@echo "📦 Installing web app dependencies..."
 	cd web && make install
 
-build-web:
-	@echo "🏗️  Building web app..."
-	cd web && make build
-
-# Shared Commands
-install: install-mobile install-web
-	@echo "✅ All dependencies installed!"
+# Code quality
+lint:
+	npx eslint .
 
 clean:
 	@echo "🧹 Cleaning all build artifacts..."

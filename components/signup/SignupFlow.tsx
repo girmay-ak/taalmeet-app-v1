@@ -11,11 +11,11 @@
 
 import React, { useState } from 'react';
 import { Alert } from 'react-native';
-import { OnboardingScreens } from './OnboardingScreens';
 import { SignupStep1 } from './SignupStep1';
 import { SignupStep2 } from './SignupStep2';
 import { SignupStep3 } from './SignupStep3';
 import { SignupStep4 } from './SignupStep4';
+import { SignupStep4Profile } from './SignupStep4Profile';
 import { SuccessScreen } from './SuccessScreen';
 import { useFullSignUp } from '@/hooks/useAuth';
 import type { Language, TeachingLanguage } from '@/utils/validators';
@@ -29,7 +29,7 @@ interface SignupFlowProps {
   onBackToLogin: () => void;
 }
 
-type SignupStep = 'onboarding' | 'step1' | 'step2' | 'step3' | 'step4' | 'success';
+type SignupStep = 'step1' | 'step2' | 'step3' | 'step4' | 'success';
 
 interface SignupData {
   // Step 1
@@ -42,10 +42,16 @@ interface SignupData {
   // Step 3
   city?: string;
   country?: string;
-  // Step 4
+  // Step 4 - Profile Info
+  avatar?: string;
+  fullName?: string;
+  nickname?: string;
+  dateOfBirth?: Date;
+  phone?: string;
+  gender?: string;
+  // Legacy Step 4 fields (if keeping both)
   bio?: string;
   interests?: string[];
-  avatar?: string;
 }
 
 // ============================================================================
@@ -53,7 +59,7 @@ interface SignupData {
 // ============================================================================
 
 export function SignupFlow({ onComplete, onBackToLogin }: SignupFlowProps) {
-  const [currentStep, setCurrentStep] = useState<SignupStep>('onboarding');
+  const [currentStep, setCurrentStep] = useState<SignupStep>('step1');
   const [signupData, setSignupData] = useState<SignupData>({});
   
   // Main signup mutation - called only at the END of Step 4
@@ -62,17 +68,6 @@ export function SignupFlow({ onComplete, onBackToLogin }: SignupFlowProps) {
   // ============================================================================
   // STEP HANDLERS
   // ============================================================================
-
-  /**
-   * Onboarding complete → Go to Step 1
-   */
-  const handleOnboardingComplete = () => {
-    setCurrentStep('step1');
-  };
-
-  const handleOnboardingSkip = () => {
-    setCurrentStep('step1');
-  };
 
   /**
    * Step 1 complete → Store account data, go to Step 2
@@ -110,23 +105,27 @@ export function SignupFlow({ onComplete, onBackToLogin }: SignupFlowProps) {
 
   /**
    * Step 4 complete → SUBMIT EVERYTHING TO BACKEND
-   * Data: bio, interests, avatar
+   * Data: profile info (avatar, fullName, nickname, dateOfBirth, phone, gender)
    * 
    * This is where useFullSignUp is called with ALL collected data
    */
-  const handleStep4Complete = async (data: { 
-    bio: string; 
-    interests: string[]; 
-    avatar?: string 
+  const handleStep4Complete = async (data: {
+    avatar?: string;
+    fullName: string;
+    nickname: string;
+    dateOfBirth: Date;
+    email: string;
+    phone?: string;
+    gender: string;
   }) => {
     const finalData = { ...signupData, ...data };
 
     try {
       // Call the full signup mutation with all data
       await fullSignUpMutation.mutateAsync({
-        // Step 1 data
-        name: finalData.name!,
-        email: finalData.email!,
+        // Step 1 data (use email/name from profile if provided, otherwise from Step 1)
+        name: finalData.fullName || finalData.name!,
+        email: finalData.email || signupData.email!,
         password: finalData.password!,
         // Step 2 data
         learning: finalData.learning,
@@ -134,10 +133,10 @@ export function SignupFlow({ onComplete, onBackToLogin }: SignupFlowProps) {
         // Step 3 data
         city: finalData.city,
         country: finalData.country,
-        // Step 4 data
-        bio: finalData.bio,
-        interests: finalData.interests,
+        // Step 4 data - profile info
         avatar: finalData.avatar,
+        // Note: Additional profile fields like nickname, dateOfBirth, phone, gender
+        // can be stored via profileService after account creation if needed
       });
 
       // Success! Go to success screen
@@ -174,14 +173,6 @@ export function SignupFlow({ onComplete, onBackToLogin }: SignupFlowProps) {
   // ============================================================================
 
   switch (currentStep) {
-    case 'onboarding':
-      return (
-        <OnboardingScreens
-          onComplete={handleOnboardingComplete}
-          onSkip={handleOnboardingSkip}
-        />
-      );
-      
     case 'step1':
       return (
         <SignupStep1
@@ -208,9 +199,11 @@ export function SignupFlow({ onComplete, onBackToLogin }: SignupFlowProps) {
       
     case 'step4':
       return (
-        <SignupStep4
+        <SignupStep4Profile
           onNext={handleStep4Complete}
           onBack={handleBackFromStep4}
+          initialEmail={signupData.email}
+          initialName={signupData.name}
           isSubmitting={fullSignUpMutation.isPending}
         />
       );

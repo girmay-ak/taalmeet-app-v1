@@ -36,9 +36,43 @@ import { NotificationContainer } from '@/components/notifications/NotificationCo
 import { useMatchFound } from '@/providers/MatchFoundProvider';
 import type { ConnectionWithProfile } from '@/services/connectionsService';
 import * as Location from 'expo-location';
-import { MapErrorBoundary } from '@/components/map/MapErrorBoundary';
-import { SwipeableCardStack } from '@/components/map/SwipeableCardStack';
-import type { PartnerCardData } from '@/components/map/SwipeablePartnerCard';
+// Conditionally import Mapbox (only if native code is available)
+let Mapbox: any = null;
+let MapboxMap: any = null;
+let MapPinMarkers: any = null;
+let isMapboxAvailable = false;
+
+try {
+  // Import Mapbox service (sets access token)
+  require('@/services/mapbox');
+  Mapbox = require('@rnmapbox/maps').default;
+  const mapComponents = require('@/components/map/MapboxMap');
+  MapboxMap = mapComponents.MapboxMap;
+  const markersComponents = require('@/components/map/MapPinMarkers');
+  MapPinMarkers = markersComponents.MapPinMarkers;
+  isMapboxAvailable = true;
+} catch (error) {
+  // Mapbox native code not available - will use Google Maps fallback
+  console.warn('Mapbox not available, using Google Maps fallback:', error);
+  isMapboxAvailable = false;
+}
+
+// Import Google Maps as fallback
+let GoogleMap: any = null;
+try {
+  const googleMapComponents = require('@/components/map/GoogleMap');
+  GoogleMap = googleMapComponents.GoogleMap;
+} catch (error) {
+  console.warn('Google Maps not available:', error);
+}
+
+import type { NearbyUser as NearbyUserMarker } from '@/components/map/NearbyUserMarkers';
+import { LocationHeaderCard } from '@/components/map/LocationHeaderCard';
+import { EventCardList } from '@/components/map/EventCardList';
+import type { EventCardData } from '@/components/map/EventCard';
+import { CenterUserAvatar } from '@/components/map/CenterUserAvatar';
+import { RadarPulse } from '@/components/map/RadarPulse';
+import { PersonCard } from '@/components/map/PersonCard';
 import { getLanguageFlag } from '@/utils/languageFlags';
 import type { NearbyUser } from '@/services/locationService';
 import { isMapboxAvailable, Mapbox } from '@/services/mapbox';
@@ -77,36 +111,23 @@ export default function MapScreen() {
   const { colors } = useTheme();
   const { profile, user } = useAuth();
   
-  // Log Mapbox initialization
-  useEffect(() => {
-    if (isMapboxAvailable) {
-      console.log('[MapScreen] ✅ Using Mapbox map');
-    } else {
-      console.warn('[MapScreen] ⚠️ Mapbox not available. Make sure Mapbox is properly configured.');
-    }
-  }, []);
+  // ============================================================================
+  // STATE SEPARATION (VERY IMPORTANT - DO NOT MIX)
+  // ============================================================================
+  // 1. Logged-in user state (fixed overlay, never moves)
+  const [userLocation, setUserLocation] = useState<[number, number] | null>([4.3007, 52.0705]);
+  const [isGettingLocation, setIsGettingLocation] = useState(false); // For "My Location" button
+  const [isFindingLocation, setIsFindingLocation] = useState(true); // Pulse animation - stops when users loaded
+  const [peopleLoaded, setPeopleLoaded] = useState(false); // True when nearby users are fetched
   
+  // 2. Selected person state (independent from center user)
   const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
-  const [activeCardPartnerId, setActiveCardPartnerId] = useState<string | null>(null);
+  
+  // 3. UI state
   const [showFilters, setShowFilters] = useState(false);
-  // Initialize with profile location if available, otherwise default to The Hague
-  // Ensure coordinates are valid numbers
-  const getValidLocation = (lat: number | null | undefined, lng: number | null | undefined): [number, number] => {
-    if (lat && lng && 
-        typeof lat === 'number' && typeof lng === 'number' &&
-        !isNaN(lat) && !isNaN(lng) &&
-        isFinite(lat) && isFinite(lng)) {
-      return [lng, lat];
-    }
-    return [4.3007, 52.0705]; // Default to The Hague
-  };
-
-  const [userLocation, setUserLocation] = useState<[number, number]>(
-    getValidLocation(profile?.lat, profile?.lng)
-  );
+  const [isExpanded, setIsExpanded] = useState(false);
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
   const [locationPermission, setLocationPermission] = useState<Location.PermissionStatus | null>(null);
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const locationWatchSubscription = useRef<Location.LocationSubscription | null>(null);
   const mapRef = useRef<any>(null);
   const [filters, setFilters] = useState<Filters>({
@@ -115,7 +136,44 @@ export default function MapScreen() {
     minMatchScore: 0,
     languages: [], // Initialize as empty array
   });
+
+  const bottomSheetHeight = useRef(new Animated.Value(0)).current; // Start hidden
+  const eventSlideAnim = useRef(new Animated.Value(height)).current;
+  const [showEvents, setShowEvents] = useState(false);
+  const cardSlideAnim = useRef(new Animated.Value(40)).current; // Start slightly below
+  const cardOpacity = useRef(new Animated.Value(0)).current;
   const updateLocationMutation = useUpdateUserLocation();
+
+  // Mock event data (replace with real data from your backend)
+  const mockEvents: EventCardData[] = [
+    {
+      id: '1',
+      title: 'National Music Festival',
+      imageUrl: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400',
+      date: 'Mon, Dec 24',
+      time: '18.00 - 23.00 PM',
+      location: 'Grand Park, New York',
+      isFavorite: false,
+    },
+    {
+      id: '2',
+      title: 'Language Exchange Meetup',
+      imageUrl: 'https://images.unsplash.com/photo-1511578314322-379afb476865?w=400',
+      date: 'Tue, Dec 25',
+      time: '14.00 - 16.00 PM',
+      location: 'Central Library, NYC',
+      isFavorite: true,
+    },
+    {
+      id: '3',
+      title: 'International Food Fair',
+      imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400',
+      date: 'Wed, Dec 26',
+      time: '12.00 - 20.00 PM',
+      location: 'Times Square, New York',
+      isFavorite: false,
+    },
+  ];
 
   // Get current user's languages for filtering
   const currentUserLanguages = useMemo(() => {
@@ -155,6 +213,28 @@ export default function MapScreen() {
 
   // Fetch nearby users
   const { data: nearbyUsers = [], isLoading, error, refetch } = useNearbyUsers(backendFilters);
+
+  // ============================================================================
+  // LOADING FLOW (CORRECT)
+  // ============================================================================
+  // 1. Screen mounts → isFindingLocation = true
+  // 2. Get user location
+  // 3. Fetch nearby people
+  // 4. Set peopleLoaded = true
+  // 5. Set isFindingLocation = false
+  // 6. Stop pulse animation
+  // 7. Render nearby people markers
+  useEffect(() => {
+    if (!isLoading && nearbyUsers.length > 0) {
+      // People successfully loaded
+      setPeopleLoaded(true);
+      setIsFindingLocation(false);
+    } else if (isLoading) {
+      // Refetching (e.g., filter change)
+      setPeopleLoaded(false);
+      setIsFindingLocation(true);
+    }
+  }, [isLoading, nearbyUsers.length]);
   
   // Nearby users loaded
   
@@ -479,9 +559,10 @@ export default function MapScreen() {
         }
       }
 
-      // Get fresh location
+      // Get fresh location (balanced for speed)
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: 5000,
       });
 
       const { latitude, longitude } = location.coords;
@@ -535,14 +616,25 @@ export default function MapScreen() {
           return;
         }
 
-        // Get current location from device
+        // OPTIMIZED: Get last known location first (instant)
         setIsGettingLocation(true);
+        const lastLocation = await Location.getLastKnownPositionAsync({});
+        if (lastLocation && isMounted) {
+          const { latitude, longitude } = lastLocation.coords;
+          setUserLocation([longitude, latitude]);
+          setIsGettingLocation(false); // Stop loading immediately
+        }
+
+        // Then get current accurate location in background
         const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
+          accuracy: Location.Accuracy.Balanced, // Faster than High
+          timeInterval: 5000, // 5 second timeout
         });
 
         if (isMounted) {
           const { latitude, longitude } = location.coords;
+          setUserLocation([longitude, latitude]);
+          setIsGettingLocation(false);
           
           // Only use device location if profile location is not available
           // This prevents simulator's San Francisco location from overriding The Hague
@@ -566,13 +658,13 @@ export default function MapScreen() {
           }
         }
 
-        // Start watching location changes (update every 20 seconds)
+        // Start watching location changes (optimized for battery)
         if (isMounted) {
           locationWatchSubscription.current = await Location.watchPositionAsync(
             {
-              accuracy: Location.Accuracy.High,
-              timeInterval: 20000, // Update every 20 seconds
-              distanceInterval: 100, // Update every 100 meters
+              accuracy: Location.Accuracy.Balanced, // Better battery life
+              timeInterval: 30000, // Update every 30 seconds
+              distanceInterval: 150, // Update every 150 meters
             },
             (location) => {
               if (isMounted) {
@@ -634,13 +726,52 @@ export default function MapScreen() {
     (filters.languages && filters.languages.length > 0);
 
 
-
-  // Handle marker press - bring card to front
-  const handleMarkerPress = useCallback((user: any) => {
-    setActiveCardPartnerId(user.id);
+  // ============================================================================
+  // MARKER SELECTION LOGIC (CORRECT BEHAVIOR)
+  // ============================================================================
+  // When a person marker is tapped:
+  // ✅ DO: Highlight selected marker (AnimatedMarkerWrapper handles this)
+  // ✅ DO: Show bottom person card
+  // ✅ DO: Dim other markers
+  // ❌ DON'T: Move map center
+  // ❌ DON'T: Move logged-in user avatar
+  // ❌ DON'T: Restart pulse animation
+  const handleMarkerPress = useCallback((user: NearbyUserMarker) => {
     setSelectedPartner(user.id);
-    centerMapOnPartner(user.id);
-  }, [centerMapOnPartner]);
+    
+    // Animate card slide up with spring
+    Animated.parallel([
+      Animated.spring(cardSlideAnim, {
+        toValue: 0, // Slide to position
+        useNativeDriver: true,
+        tension: 100,
+        friction: 10,
+      }),
+      Animated.timing(cardOpacity, {
+        toValue: 1,
+        duration: 300, // 250-300ms as per requirement
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [cardSlideAnim, cardOpacity]);
+
+  // Dismiss card with slide down animation
+  const dismissCard = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(cardSlideAnim, {
+        toValue: 40, // Slide down
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cardOpacity, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setSelectedPartner(null);
+    });
+  }, [cardSlideAnim, cardOpacity]);
 
   // Track retry attempts for network errors
   const [retryCount, setRetryCount] = useState(0);
@@ -676,47 +807,43 @@ export default function MapScreen() {
   const locationDisplayName = profile?.city || profile?.country || 'Unknown Location';
 
   return (
-    <MapErrorBoundary>
-      <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
-        {/* Notifications Container */}
-        <NotificationContainer />
-        
-        {/* Map Area */}
-        <View style={styles.mapContainer}>
-        {/* Use Mapbox if available, otherwise show message */}
-        {mapboxComponentsLoaded && MapboxMap && NearbyUserMarkers ? (
+    <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+      {/* Notifications Container */}
+      <NotificationContainer />
+      
+      {/* ============================================================================
+          MAP AREA - CORRECT ARCHITECTURE
+          ============================================================================
+          LAYER 1: Map (background) - moves when user pans
+          LAYER 2: Person markers - positioned relative to map, move with map
+          LAYER 3: Fixed center overlay (logged-in user) - NEVER moves
+          LAYER 4: Pulse animation (when finding) - attached to center overlay
+          LAYER 5: UI controls (top bar, buttons)
+          LAYER 6: Bottom person card (when marker selected)
+          ============================================================================ */}
+      <View style={styles.mapContainer}>
+        {/* Mapbox Map, Google Maps fallback, or Loading UI */}
+        {isMapboxAvailable && userLocation ? (
           <MapboxMap
-            ref={mapRef}
-            userLocation={
-              userLocation &&
-              typeof userLocation[0] === 'number' &&
-              typeof userLocation[1] === 'number' &&
-              !isNaN(userLocation[0]) &&
-              !isNaN(userLocation[1]) &&
-              isFinite(userLocation[0]) &&
-              isFinite(userLocation[1])
-                ? {
-                    latitude: userLocation[1],
-                    longitude: userLocation[0],
-                  }
-                : {
-                    latitude: 52.0705, // The Hague default
-                    longitude: 4.3007,
-                  }
-            }
+            userLocation={{
+              latitude: userLocation[1],
+              longitude: userLocation[0],
+            }}
+            showUserLocation={false} // Don't show default marker
             onUserLocationUpdate={handleUserLocationUpdate}
-            zoomLevel={12}
-            styleURL={
-              mapType === 'satellite'
-                ? Mapbox?.StyleURL?.SatelliteStreet || 'mapbox://styles/mapbox/satellite-streets-v12'
-                : mapType === 'hybrid'
-                ? Mapbox?.StyleURL?.SatelliteStreet || 'mapbox://styles/mapbox/satellite-streets-v12'
-                : Mapbox?.StyleURL?.Dark || 'mapbox://styles/mapbox/dark-v11'
-            }
-            showUserLocation={true}
+            styleURL={colors.mode === 'dark' ? Mapbox.StyleURL.Dark : Mapbox.StyleURL.Light}
+            zoomLevel={13}
           >
-            {/* Nearby User Markers */}
-            <NearbyUserMarkers
+            {/* ============================================================
+                MARKER RULES (OTHER PEOPLE ONLY)
+                ============================================================
+                - Only OTHER USERS appear as map markers
+                - Logged-in user is NEVER a marker (fixed overlay above)
+                - Marker press:
+                  * Sets selectedPartner
+                  * Does NOT affect: user center, pulse, or map center
+                ============================================================ */}
+            <MapPinMarkers
               users={markerUsers}
               activePartnerId={activeCardPartnerId}
               onMarkerPress={(user) => {
@@ -728,8 +855,37 @@ export default function MapScreen() {
               }}
               markerSize={48}
               showOnlineStatus={true}
+              selectedUserId={selectedPartner}
             />
           </MapboxMap>
+        ) : GoogleMap && userLocation ? (
+          <GoogleMap
+            userLocation={{
+              latitude: userLocation[1],
+              longitude: userLocation[0],
+            }}
+            users={markerUsers} // Only OTHER users, not logged-in user
+            onUserPress={handleMarkerPress}
+            onUserLocationUpdate={handleUserLocationUpdate}
+            zoomLevel={12}
+            mapType={mapType}
+            showUserMarker={false} // Logged-in user is fixed overlay above, not a map marker
+            selectedUserId={selectedPartner}
+          />
+        ) : GoogleMap ? (
+          // Show Google Maps with default location even if userLocation not ready
+          <GoogleMap
+            userLocation={{
+              latitude: 52.0705, // The Hague default
+              longitude: 4.3007,
+            }}
+            users={markerUsers}
+            onUserPress={handleMarkerPress}
+            onUserLocationUpdate={handleUserLocationUpdate}
+            zoomLevel={12}
+            mapType={mapType}
+            selectedUserId={selectedPartner}
+          />
         ) : (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background.secondary, padding: 20 }}>
             <Text style={{ color: colors.text.primary, fontSize: 18, fontWeight: '600', marginBottom: 12, textAlign: 'center' }}>
@@ -771,138 +927,73 @@ export default function MapScreen() {
           </View>
         )}
 
-        {/* Error Banner - Network Errors */}
-        {error && (error instanceof Error && (error.message.includes('network') || error.message.includes('Network'))) && (
-          <View style={[styles.errorBanner, { backgroundColor: colors.semantic.error, borderColor: colors.semantic.error }]}>
-            <Ionicons name="warning" size={20} color="#FFFFFF" />
-            <Text style={styles.errorBannerText}>
-              Network error. Check your connection.
-            </Text>
-            <TouchableOpacity
-              onPress={() => {
-                setRetryCount(prev => prev + 1);
-                refetch();
-              }}
-              style={styles.errorRetryButton}
-            >
-              <Text style={styles.errorRetryText}>Retry</Text>
-            </TouchableOpacity>
+        {/* ============================================================
+            LOGGED-IN USER (ME) — NOT A MAP MARKER
+            ============================================================
+            - Rendered as FIXED OVERLAY component
+            - Uses position: absolute and centered on screen
+            - NEVER moves, regardless of map pan/zoom/selection
+            - NEVER participates in map clustering
+            - NEVER changes on person selection
+            - This is the user's "anchor point" on the map
+            ============================================================ */}
+        <CenterUserAvatar
+          avatarUrl={profile?.avatarUrl || null}
+          displayName={profile?.displayName || 'User'}
+          isSearching={isFindingLocation}
+        />
+
+        {/* ============================================================
+            RADAR / PULSE ANIMATION — OVERLAY ONLY
+            ============================================================
+            - Visually centered on logged-in user avatar
+            - Implemented as OVERLAY animation, NOT a map marker
+            - NEVER attached to GoogleMap/MapboxMap markers
+            - Shows only when: isFindingLocation === true
+            - Stops immediately when: peopleLoaded === true
+            - Does NOT restart during person selection
+            ============================================================ */}
+        {isFindingLocation && userLocation && (
+          <View style={styles.radarCenter}>
+            <RadarPulse size={140} color="#07BD74" rings={3} showBeam={true} />
           </View>
         )}
 
-        {/* Loading Overlay */}
-        {(isLoading || isGettingLocation) && (
-          <View style={[styles.loadingOverlay, { backgroundColor: `${colors.background.primary}CC` }]}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.text.muted }]}>
-              {isGettingLocation ? 'Getting your location...' : 'Finding nearby partners...'}
-            </Text>
-          </View>
-        )}
-
-        {/* Empty State - No Nearby Users */}
-        {!isLoading && !error && filteredPartners.length === 0 && nearbyUsers.length === 0 && (
-          <View style={[styles.emptyState, { backgroundColor: `${colors.background.secondary}E6` }]}>
-            <Ionicons name="people-outline" size={64} color={colors.text.muted} />
-            <Text style={[styles.emptyStateTitle, { color: colors.text.primary }]}>
-              No Partners Nearby
-            </Text>
-            <Text style={[styles.emptyStateMessage, { color: colors.text.muted }]}>
-              {hasActiveFilters
-                ? 'Try adjusting your filters or expanding your search distance.'
-                : 'There are no language partners nearby. Check back later or expand your search radius.'}
-            </Text>
-            {hasActiveFilters && (
-              <TouchableOpacity
-                onPress={() => {
-                  setFilters({ maxDistance: 50, availability: 'all', minMatchScore: 0, languages: [] });
-                  setShowFilters(false);
-                }}
-                style={[styles.emptyStateButton, { backgroundColor: colors.primary }]}
-              >
-                <Text style={styles.emptyStateButtonText}>Clear Filters</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              onPress={() => refetch()}
-              style={[styles.emptyStateButton, styles.emptyStateButtonSecondary, { borderColor: colors.border.default }]}
-            >
-              <Ionicons name="refresh" size={16} color={colors.text.primary} />
-              <Text style={[styles.emptyStateButtonText, { color: colors.text.primary }]}>
-                Refresh
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Empty State - Filtered Out All Users */}
-        {!isLoading && !error && nearbyUsers.length > 0 && filteredPartners.length === 0 && (
-          <View style={[styles.emptyState, styles.emptyStateSmall, { backgroundColor: `${colors.background.secondary}E6` }]}>
-            <Ionicons name="funnel-outline" size={48} color={colors.text.muted} />
-            <Text style={[styles.emptyStateTitle, styles.emptyStateTitleSmall, { color: colors.text.primary }]}>
-              No Matches with Current Filters
-            </Text>
-            <Text style={[styles.emptyStateMessage, { color: colors.text.muted }]}>
-              We found {nearbyUsers.length} partner{nearbyUsers.length !== 1 ? 's' : ''} nearby, but none match your filters.
-            </Text>
-            <TouchableOpacity
-              onPress={() => {
-                setFilters({ maxDistance: 50, availability: 'all', minMatchScore: 0, languages: [] });
-                setShowFilters(false);
-              }}
-              style={[styles.emptyStateButton, { backgroundColor: colors.primary }]}
-            >
-              <Text style={styles.emptyStateButtonText}>Adjust Filters</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Top Bar */}
+        {/* Top Bar - Location Header Card */}
         <SafeAreaView style={styles.topBar} edges={['top']}>
-          <View style={styles.topBarContent}>
-            <View style={[styles.locationButton, { backgroundColor: `${colors.background.primary}CC` }]}>
-              <Ionicons name="location" size={16} color={colors.primary} />
-              <Text style={[styles.locationText, { color: colors.text.primary }]}>
-                {locationDisplayName}
-              </Text>
-            </View>
-
-            <View style={styles.topBarRight}>
-              {/* Map Type Toggle */}
-              <TouchableOpacity
-                onPress={() => {
-                  const types: Array<'standard' | 'satellite' | 'hybrid'> = ['standard', 'satellite', 'hybrid'];
-                  const currentIndex = types.indexOf(mapType);
-                  const nextIndex = (currentIndex + 1) % types.length;
-                  setMapType(types[nextIndex]);
-                }}
-                style={[styles.mapControlButton, { backgroundColor: `${colors.background.primary}CC` }]}
-              >
-                <Ionicons 
-                  name={mapType === 'satellite' ? 'globe' : mapType === 'hybrid' ? 'layers' : 'map'} 
-                  size={18} 
-                  color={colors.text.primary} 
-                />
-              </TouchableOpacity>
-
-              {/* Filter Button */}
-              <TouchableOpacity
-                onPress={() => setShowFilters(true)}
-                style={styles.filterButton}
-              >
-                <Ionicons name="options" size={20} color={colors.background.primary} />
-                {hasActiveFilters && (
-                  <View style={[styles.filterBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.filterBadgeText}>
-                      {(filters.maxDistance < 50 ? 1 : 0) +
-                        (filters.availability !== 'all' ? 1 : 0) +
-                        (filters.minMatchScore > 0 ? 1 : 0) +
-                        (filters.languages && filters.languages.length > 0 ? 1 : 0)}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
+          <LocationHeaderCard
+            location={locationDisplayName}
+            radiusKm={filters.maxDistance}
+            onChangePress={() => setShowFilters(true)}
+          />
+          
+          {/* Map Type Toggle & Events Button - Top Right */}
+          <View style={styles.topRightControls}>
+            <TouchableOpacity
+              onPress={() => setShowEvents(true)}
+              style={[styles.mapControlButton, { backgroundColor: `${colors.background.primary}E6`, marginRight: 8 }]}
+            >
+              <Ionicons 
+                name="calendar" 
+                size={18} 
+                color={colors.primary} 
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                const types: Array<'standard' | 'satellite' | 'hybrid'> = ['standard', 'satellite', 'hybrid'];
+                const currentIndex = types.indexOf(mapType);
+                const nextIndex = (currentIndex + 1) % types.length;
+                setMapType(types[nextIndex]);
+              }}
+              style={[styles.mapControlButton, { backgroundColor: `${colors.background.primary}E6` }]}
+            >
+              <Ionicons 
+                name={mapType === 'satellite' ? 'globe' : mapType === 'hybrid' ? 'layers' : 'map'} 
+                size={18} 
+                color={colors.text.primary} 
+              />
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
 
@@ -918,30 +1009,78 @@ export default function MapScreen() {
         </View>
       </View>
 
-      {/* Swipeable Partner Cards */}
-      {!isLoading && !error && (
-        <SwipeableCardStack
-          partners={partnerCards}
-          onSwipeLeft={handleSwipeLeft}
-          onSwipeRight={handleSwipeRight}
-          onViewProfile={handleViewProfile}
-          onChat={handleChat}
-          onCardChange={handleCardChange}
-          activePartnerId={activeCardPartnerId}
-          emptyMessage={
-            nearbyUsers.length === 0
-              ? 'No Partners Nearby'
-              : 'No Matches with Current Filters'
-          }
-          emptySubmessage={
-            nearbyUsers.length === 0
-              ? hasActiveFilters
-                ? 'Try adjusting your filters or expanding your search distance.'
-                : 'There are no language partners nearby. Check back later or expand your search radius.'
-              : `We found ${nearbyUsers.length} partner${nearbyUsers.length !== 1 ? 's' : ''} nearby, but none match your filters.`
-          }
-        />
+      {/* ============================================================
+          BOTTOM PERSON CARD
+          ============================================================
+          - Appears only when selectedPartner !== null
+          - Slides up from bottom (translateY + opacity)
+          - Dismiss resets selectedPartner to null
+          - Does NOT affect radar, pulse, or center user
+          ============================================================ */}
+      {selected && (
+        <Animated.View
+          style={[
+            styles.personCardContainer,
+            {
+              transform: [{ translateY: cardSlideAnim }],
+              opacity: cardOpacity,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={(e) => {
+              e.stopPropagation();
+            }}
+          >
+            <PersonCard
+              id={selected.id}
+              name={selected.name}
+              age={selected.age}
+              avatarUrl={selected.avatar}
+              distance={selected.distance}
+              matchScore={selected.matchScore}
+              connectionStatus={
+                selectedConnectionStatus?.status === 'connected'
+                  ? 'connected'
+                  : selectedConnectionStatus?.status === 'request_received' ||
+                    selectedConnectionStatus?.status === 'request_sent'
+                  ? 'pending'
+                  : 'none'
+              }
+              onViewProfile={() => {
+                router.push(`/partner/${selected.id}`);
+              }}
+              onMessage={() => {
+                if (selectedConnectionStatus?.status === 'connected') {
+                  router.push(`/chat/${selected.id}`);
+                }
+              }}
+            />
+          </TouchableOpacity>
+          {/* Dismiss by tapping outside */}
+          <TouchableOpacity
+            style={styles.dismissOverlay}
+            activeOpacity={1}
+            onPress={dismissCard}
+          />
+        </Animated.View>
       )}
+
+      {/* Bottom Sheet (for expanded list - kept for compatibility) */}
+      <Animated.View
+        style={[
+          styles.bottomSheet,
+          {
+            backgroundColor: colors.background.secondary,
+            height: bottomSheetHeight,
+          },
+        ]}
+      >
+        {/* Handle */}
+        <TouchableOpacity onPress={toggleExpanded} style={styles.handleContainer}>
+          <View style={[styles.handle, { backgroundColor: colors.border.default }]} />
+        </TouchableOpacity>
 
       {/* Legacy Bottom Sheet - Hidden but kept for reference */}
       {false && (
@@ -1089,29 +1228,7 @@ export default function MapScreen() {
                 </View>
               </View>
             </View>
-          ) : (
-            <View style={styles.headerInfo}>
-              {filteredPartners.length > 0 ? (
-                <>
-                  <Text style={[styles.partnerCount, { color: colors.text.primary }]}>
-                    {filteredPartners.length} partner{filteredPartners.length !== 1 ? 's' : ''} nearby
-                  </Text>
-                  {nearbyUsers.length > filteredPartners.length && (
-                    <Text style={[styles.partnerHint, { color: colors.text.muted }]}>
-                      {nearbyUsers.length - filteredPartners.length} hidden by filters
-                    </Text>
-                  )}
-                  <Text style={[styles.partnerHint, { color: colors.text.muted }]}>
-                    Tap markers to see details
-                  </Text>
-                </>
-              ) : (
-                <Text style={[styles.partnerHint, { color: colors.text.muted }]}>
-                  No partners match your filters
-                </Text>
-              )}
-            </View>
-          )}
+          ) : null}
 
           {/* Partner List - Removed (replaced by swipeable cards) */}
         </ScrollView>
@@ -1400,9 +1517,43 @@ export default function MapScreen() {
         </View>
       </Modal>
 
-        {/* Match Found Popup is now handled globally via GlobalMatchFoundPopup */}
-      </View>
-    </MapErrorBoundary>
+      {/* Events Modal */}
+      <Modal
+        visible={showEvents}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowEvents(false)}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background.primary }]}>
+          {/* Header */}
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border.default }]}>
+            <TouchableOpacity onPress={() => setShowEvents(false)}>
+              <Ionicons name="close" size={28} color={colors.text.primary} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text.primary }]}>
+              Nearby Events
+            </Text>
+            <View style={{ width: 28 }} />
+          </View>
+
+          {/* Event Cards List */}
+          <EventCardList
+            events={mockEvents}
+            onEventPress={(event) => {
+              console.log('Event pressed:', event);
+              // Navigate to event details or handle event press
+            }}
+            onFavoriteToggle={(eventId) => {
+              console.log('Toggle favorite:', eventId);
+              // Handle favorite toggle
+            }}
+            showHeader={false}
+          />
+        </SafeAreaView>
+      </Modal>
+
+      {/* Match Found Popup is now handled globally via GlobalMatchFoundPopup */}
+    </View>
   );
 }
 
@@ -1428,9 +1579,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 1000,
   },
+  loadingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    minWidth: 200,
+  },
+  loadingTitle: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '600',
+  },
   loadingText: {
     marginTop: 8,
     fontSize: 14,
+    textAlign: 'center',
+  },
+  radarCenter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 99, // Below center avatar (100)
+    pointerEvents: 'none',
   },
   topBar: {
     position: 'absolute',
@@ -1438,29 +1618,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
+    paddingTop: 12,
   },
-  topBarContent: {
+  topRightControls: {
+    position: 'absolute',
+    top: 60,
+    right: 24,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  locationButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
-  },
-  locationText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  topBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
   },
   mapControlButton: {
@@ -1469,10 +1633,15 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   mapControls: {
     position: 'absolute',
-    right: 16,
+    right: 24,
     bottom: 200,
     gap: 12,
     zIndex: 10,
@@ -1484,29 +1653,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  filterButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  filterBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  filterBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
   bottomSheet: {
     position: 'absolute',
     bottom: 0,
@@ -1514,6 +1660,12 @@ const styles = StyleSheet.create({
     right: 0,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
+    paddingBottom: 24, // Add space at bottom
   },
   handleContainer: {
     alignItems: 'center',
@@ -1521,8 +1673,9 @@ const styles = StyleSheet.create({
   },
   handle: {
     width: 48,
-    height: 4,
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#E0E0E0',
   },
   sheetContent: {
     flex: 1,
@@ -1544,7 +1697,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 16,
+    marginBottom: 24, // Increased bottom spacing
     gap: 12,
   },
   selectedAvatar: {
@@ -1797,149 +1950,25 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
   },
-  errorBanner: {
+  personCardContainer: {
     position: 'absolute',
-    top: 80,
+    bottom: 24,
     left: 16,
     right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 12,
-    zIndex: 1000,
+    zIndex: 50,
+    // Card shadow
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowRadius: 16,
+    elevation: 12,
   },
-  errorBannerText: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  errorRetryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF20',
-  },
-  errorRetryText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  emptyState: {
+  dismissOverlay: {
     position: 'absolute',
-    top: '30%',
-    left: 16,
-    right: 16,
-    alignItems: 'center',
-    padding: 24,
-    borderRadius: 24,
-    gap: 12,
-    zIndex: 100,
-  },
-  emptyStateSmall: {
-    top: '40%',
-    padding: 20,
-  },
-  emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  emptyStateTitleSmall: {
-    fontSize: 18,
-  },
-  emptyStateMessage: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  emptyStateButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 8,
-    minWidth: 120,
-    alignItems: 'center',
-  },
-  emptyStateButtonSecondary: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    marginTop: 8,
-  },
-  emptyStateButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  locationPermissionPrompt: {
-    marginTop: 32,
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 32,
-  },
-  locationPermissionText: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  locationPermissionButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  locationPermissionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  languageChipsContainer: {
-    marginTop: 12,
-    gap: 12,
-  },
-  languageSectionLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  languageChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 4,
-  },
-  languageChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  languageChipText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  clearText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  filterHint: {
-    fontSize: 12,
-    marginTop: 4,
-    marginBottom: 8,
+    top: -height, // Cover entire screen above card
+    left: -16,
+    right: -16,
+    height: height,
+    zIndex: -1,
   },
 });

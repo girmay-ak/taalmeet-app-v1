@@ -174,10 +174,8 @@ export function usePushNotificationsSetup() {
         // Get Expo push token
         const token = await notificationService.getExpoPushToken();
         if (!token) {
-          // Silently skip in development if no token (expected when no projectId)
-          if (!__DEV__) {
-            console.log('Failed to get Expo push token');
-          }
+          // Push token not available (likely no EAS projectId configured)
+          // This is expected in development without EAS setup
           return;
         }
 
