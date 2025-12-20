@@ -34,6 +34,7 @@ export { EventHorizontalCard } from './events/EventHorizontalCard';
 // Profile Components
 export { EditProfileModal } from './profile/EditProfileModal';
 export { ChangePasswordModal } from './profile/ChangePasswordModal';
+export { VerificationBadge } from './profile/VerificationBadge';
 
 // TODO: Fix these animations (use motion/react - web-only)
 // export { AnimatedGradient } from './animations/AnimatedGradient';

@@ -3,7 +3,6 @@
  * Export all signup flow components
  */
 
-export { OnboardingScreens } from './OnboardingScreens';
 export { SignupFlow } from './SignupFlow';
 export { SignupStep1 } from './SignupStep1';
 export { SignupStep2 } from './SignupStep2';

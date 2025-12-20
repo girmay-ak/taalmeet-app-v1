@@ -11,7 +11,6 @@
 
 import React, { useState } from 'react';
 import { Alert } from 'react-native';
-import { OnboardingScreens } from './OnboardingScreens';
 import { SignupStep1 } from './SignupStep1';
 import { SignupStep2 } from './SignupStep2';
 import { SignupStep3 } from './SignupStep3';
@@ -30,7 +29,7 @@ interface SignupFlowProps {
   onBackToLogin: () => void;
 }
 
-type SignupStep = 'onboarding' | 'step1' | 'step2' | 'step3' | 'step4' | 'success';
+type SignupStep = 'step1' | 'step2' | 'step3' | 'step4' | 'success';
 
 interface SignupData {
   // Step 1
@@ -48,7 +47,6 @@ interface SignupData {
   fullName?: string;
   nickname?: string;
   dateOfBirth?: Date;
-  email?: string; // Already from Step 1, but may be updated
   phone?: string;
   gender?: string;
   // Legacy Step 4 fields (if keeping both)
@@ -61,7 +59,7 @@ interface SignupData {
 // ============================================================================
 
 export function SignupFlow({ onComplete, onBackToLogin }: SignupFlowProps) {
-  const [currentStep, setCurrentStep] = useState<SignupStep>('onboarding');
+  const [currentStep, setCurrentStep] = useState<SignupStep>('step1');
   const [signupData, setSignupData] = useState<SignupData>({});
   
   // Main signup mutation - called only at the END of Step 4
@@ -70,17 +68,6 @@ export function SignupFlow({ onComplete, onBackToLogin }: SignupFlowProps) {
   // ============================================================================
   // STEP HANDLERS
   // ============================================================================
-
-  /**
-   * Onboarding complete → Go to Step 1
-   */
-  const handleOnboardingComplete = () => {
-    setCurrentStep('step1');
-  };
-
-  const handleOnboardingSkip = () => {
-    setCurrentStep('step1');
-  };
 
   /**
    * Step 1 complete → Store account data, go to Step 2
@@ -186,14 +173,6 @@ export function SignupFlow({ onComplete, onBackToLogin }: SignupFlowProps) {
   // ============================================================================
 
   switch (currentStep) {
-    case 'onboarding':
-      return (
-        <OnboardingScreens
-          onComplete={handleOnboardingComplete}
-          onSkip={handleOnboardingSkip}
-        />
-      );
-      
     case 'step1':
       return (
         <SignupStep1

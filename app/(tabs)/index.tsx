@@ -21,10 +21,14 @@ import { useTheme } from '@/lib/theme/ThemeProvider';
 import { useAuth } from '@/providers';
 import { useDiscoverFeed } from '@/hooks/useDiscover';
 import { useLanguageEvents } from '@/hooks/useEventbriteEvents';
+import { useEvents, useToggleFavorite, useTrendingEvents } from '@/hooks/useEvents';
 import { EventCard } from '@/components/events/EventCard';
 import { EventHorizontalCard } from '@/components/events/EventHorizontalCard';
+import { EventDetailCard } from '@/components/events/EventDetailCard';
+import { EventCategoryFilter } from '@/components/events/EventCategoryFilter';
 import { getLanguageFlag } from '@/utils/languageFlags';
 import type { DiscoverFilters } from '@/services/discoverService';
+import type { EventCategory } from '@/types/events';
 import { DiscoveryFiltersModal } from '@/components/discovery/DiscoveryFiltersModal';
 import { useDiscoveryFilterPreferences } from '@/hooks/useDiscoveryFilters';
 
@@ -34,6 +38,7 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const { profile, user } = useAuth();
   const [selectedLanguage, setSelectedLanguage] = useState<string>('All');
+  const [selectedCategory, setSelectedCategory] = useState<EventCategory | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
   const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [filters, setFilters] = useState<DiscoverFilters>({
@@ -84,11 +89,38 @@ export default function HomeScreen() {
     enabled: selectedLanguage !== 'All', // Only fetch when a specific language is selected
   });
 
+  // Fetch internal events with filters
+  const {
+    data: internalEvents,
+    isLoading: internalEventsLoading,
+    refetch: refetchEvents,
+  } = useEvents({
+    language: selectedLanguage === 'All' ? undefined : selectedLanguage,
+    category: selectedCategory,
+    limit: 20,
+    startDate: new Date().toISOString(),
+  });
+
+  // Fetch trending events
+  const { data: trendingEvents } = useTrendingEvents(5);
+
+  // Toggle favorite mutation
+  const toggleFavoriteMutation = useToggleFavorite();
+
   // Handle refresh
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refetch();
+    await Promise.all([refetch(), refetchEvents()]);
     setRefreshing(false);
+  };
+
+  // Handle favorite toggle
+  const handleToggleFavorite = async (eventId: string) => {
+    try {
+      await toggleFavoriteMutation.mutateAsync(eventId);
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+    }
   };
 
   // Format date for sessions
@@ -329,17 +361,24 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* New Users Section */}
-          {data?.newUsers && data.newUsers.length > 0 && (
+          {/* Trending Events Section */}
+          {trendingEvents && trendingEvents.length > 0 && (
             <View style={[styles.nearbySection, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
               <Text style={[styles.nearbySectionTitle, { color: colors.text.primary }]}>
-                New Members <Text style={{ color: colors.text.muted }}>({data.newUsers.length})</Text>
+                🔥 Trending Events
               </Text>
               <FlatList
                 horizontal
-                data={data.newUsers}
-                renderItem={renderNearbyPartner}
-                keyExtractor={(item) => item.id}
+                data={trendingEvents}
+                renderItem={({ item }) => (
+                  <View style={{ width: 300, marginRight: 16 }}>
+                    <EventDetailCard
+                      event={item}
+                      onFavoritePress={() => handleToggleFavorite(item.id)}
+                    />
+                  </View>
+                )}
+                keyExtractor={(item) => `trending-${item.id}`}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.nearbyList}
               />
@@ -360,6 +399,66 @@ export default function HomeScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.nearbyList}
               />
+            </View>
+          )}
+
+          {/* Category Filter */}
+          {internalEvents && internalEvents.events.length > 0 && (
+            <View style={[styles.categoryFilterSection, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
+              <Text style={[styles.nearbySectionTitle, { color: colors.text.primary, paddingHorizontal: 16 }]}>
+                Browse by Category
+              </Text>
+              <EventCategoryFilter
+                selectedCategory={selectedCategory}
+                onCategorySelect={setSelectedCategory}
+              />
+            </View>
+          )}
+
+          {/* Internal Events Section */}
+          {internalEvents && internalEvents.events.length > 0 && (
+            <View style={styles.sessionsContainer}>
+              <View style={styles.languageSection}>
+                <View style={styles.languageHeader}>
+                  <Text style={[styles.languageTitle, { color: colors.text.primary }]}>
+                    {selectedLanguage === 'All' && !selectedCategory
+                      ? 'All Events'
+                      : selectedCategory
+                      ? `${selectedCategory.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} Events`
+                      : `${selectedLanguage} Events`}
+                  </Text>
+                  <View style={[styles.countBadge, { backgroundColor: colors.background.primary }]}>
+                    <Text style={[styles.countText, { color: colors.text.primary }]}>
+                      ({internalEvents.total})
+                    </Text>
+                  </View>
+                </View>
+                
+                {/* Enhanced Event Cards */}
+                {internalEvents.events.map((event) => (
+                  <EventDetailCard
+                    key={event.id}
+                    event={event}
+                    onFavoritePress={() => handleToggleFavorite(event.id)}
+                  />
+                ))}
+
+                {/* Load More Button */}
+                {internalEvents.hasMore && (
+                  <TouchableOpacity
+                    style={[styles.loadMoreButton, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}
+                    onPress={() => {
+                      // TODO: Implement pagination
+                      console.log('Load more events');
+                    }}
+                  >
+                    <Text style={[styles.loadMoreText, { color: colors.text.primary }]}>
+                      Load More Events
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color={colors.text.primary} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           )}
 
@@ -401,17 +500,28 @@ export default function HomeScreen() {
           {(!data || 
             (data.activeUsers.length === 0 &&
               data.recommendedUsers.length === 0 &&
-              data.newUsers.length === 0 &&
               data.sessions.length === 0 &&
+              (!internalEvents || internalEvents.events.length === 0) &&
               (selectedLanguage === 'All' || events.length === 0))) && (
             <View style={styles.emptyContainer}>
               <Ionicons name="search-outline" size={64} color={colors.text.muted} />
               <Text style={[styles.emptyTitle, { color: colors.text.primary }]}>No content available</Text>
               <Text style={[styles.emptySubtext, { color: colors.text.muted }]}>
-                {selectedLanguage !== 'All'
-                  ? `No ${selectedLanguage} sessions, events, or users found. Try a different language.`
-                  : 'Check back later for new users and sessions!'}
+                {selectedLanguage !== 'All' || selectedCategory
+                  ? 'No events found matching your filters. Try adjusting your selection.'
+                  : 'Check back later for new users, sessions, and events!'}
               </Text>
+              {(selectedLanguage !== 'All' || selectedCategory) && (
+                <TouchableOpacity
+                  style={[styles.retryButton, { backgroundColor: colors.primary, marginTop: 16 }]}
+                  onPress={() => {
+                    setSelectedLanguage('All');
+                    setSelectedCategory(undefined);
+                  }}
+                >
+                  <Text style={styles.retryButtonText}>Clear Filters</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </ScrollView>
@@ -748,5 +858,30 @@ const styles = StyleSheet.create({
   },
   capacityText: {
     fontSize: 13,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  categoryFilterSection: {
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  loadMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  loadMoreText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

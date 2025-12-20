@@ -1,6 +1,14 @@
 /**
  * Radar Pulse Component
- * Animated pulsing circle with rotating beam around user location marker
+ * 
+ * Animated pulsing circles with rotating beam around logged-in user avatar.
+ * 
+ * USAGE RULES:
+ * - Only shown when isFindingLocation === true
+ * - Stops immediately once nearby users are loaded
+ * - Attached to fixed center overlay (not a map marker)
+ * - Does NOT restart during person selection
+ * 
  * Based on reference web implementation
  */
 
@@ -48,8 +56,9 @@ export function RadarPulse({
   const glowAnim = useRef(new Animated.Value(0.5)).current;
   const centerScaleAnim = useRef(new Animated.Value(1)).current;
   const rippleAnims = useRef<Animated.Value[]>(
-    Array.from({ length: 2 }, () => new Animated.Value(0))
+    Array.from({ length: 3 }, () => new Animated.Value(0))
   ).current;
+  const scanLineAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Create staggered pulse animations for each ring with smoother easing
@@ -71,12 +80,23 @@ export function RadarPulse({
       );
     });
 
-    // Rotating radar beam animation (3 seconds per rotation)
+    // Rotating radar beam animation (3 seconds per rotation - smoother)
     const rotateAnimation = Animated.loop(
       Animated.timing(rotateAnim, {
         toValue: 1,
         duration: 3000,
         useNativeDriver: true,
+        easing: (t) => t, // Linear for consistent rotation
+      })
+    );
+
+    // Scanning line animation (synced with rotation)
+    const scanLineAnimation = Animated.loop(
+      Animated.timing(scanLineAnim, {
+        toValue: 1,
+        duration: 3000,
+        useNativeDriver: true,
+        easing: (t) => t, // Linear
       })
     );
 
@@ -112,14 +132,14 @@ export function RadarPulse({
       ])
     );
 
-    // Ripple animations for extra depth
+    // Ripple animations for extra depth (more frequent)
     const rippleAnimations = rippleAnims.map((anim, index) => {
       return Animated.loop(
         Animated.sequence([
-          Animated.delay(index * 1000),
+          Animated.delay(index * 800), // Faster ripples
           Animated.timing(anim, {
             toValue: 1,
-            duration: 3000,
+            duration: 2400, // Faster animation
             useNativeDriver: true,
           }),
           Animated.timing(anim, {
@@ -138,11 +158,13 @@ export function RadarPulse({
     rippleAnimations.forEach((anim) => anim.start());
     if (showBeam) {
       rotateAnimation.start();
+      scanLineAnimation.start();
     }
 
     return () => {
       animations.forEach((anim) => anim.stop());
       rotateAnimation.stop();
+      scanLineAnimation.stop();
       glowAnimation.stop();
       centerScaleAnimation.stop();
       rippleAnimations.forEach((anim) => anim.stop());
@@ -161,8 +183,56 @@ export function RadarPulse({
     outputRange: [0.3, 0.7, 0.3],
   });
 
+  // Scan line opacity (fades in/out as it rotates)
+  const scanOpacity = scanLineAnim.interpolate({
+    inputRange: [0, 0.1, 0.5, 0.9, 1],
+    outputRange: [0, 1, 1, 1, 0],
+  });
+
   return (
-    <View style={[styles.container, { width: size * 2.5, height: size * 2.5 }]}>
+    <View style={[styles.container, { width: size * 3.2, height: size * 3.2 }]}>
+      {/* Inner solid circle */}
+      <View
+        style={[
+          styles.innerCircle,
+          {
+            width: size * 0.8,
+            height: size * 0.8,
+            borderRadius: size * 0.4,
+            backgroundColor: `${color}40`,
+          },
+        ]}
+      />
+
+      {/* Middle semi-transparent circle */}
+      <View
+        style={[
+          styles.middleCircle,
+          {
+            width: size * 1.6,
+            height: size * 1.6,
+            borderRadius: size * 0.8,
+            backgroundColor: `${color}20`,
+            borderWidth: 2,
+            borderColor: `${color}30`,
+          },
+        ]}
+      />
+
+      {/* Outer thin ring */}
+      <View
+        style={[
+          styles.outerRing,
+          {
+            width: size * 2.4,
+            height: size * 2.4,
+            borderRadius: size * 1.2,
+            borderColor: `${color}40`,
+            borderWidth: 2,
+          },
+        ]}
+      />
+      
       {/* Expanding ripple effects (behind pulse rings) */}
       {rippleAnims.map((anim, index) => {
         const rippleScale = anim.interpolate({
@@ -224,39 +294,83 @@ export function RadarPulse({
         );
       })}
 
-      {/* Rotating radar beam */}
+      {/* Rotating radar beam - Enhanced scanning animation */}
       {showBeam && (
-        <Animated.View
-          style={[
-            styles.beamContainer,
-            {
-              width: size * 1.25,
-              height: size * 1.25,
-              transform: [{ rotate }],
-            },
-          ]}
-        >
-          <View style={styles.beamWrapper}>
-            <LinearGradient
-              colors={[
-                'transparent',
-                `${color}30`, // Gradient colors
-                `${color}60`,
-                `${color}40`,
-                'transparent',
-              ]}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={[
-                styles.beamGradient,
-                {
-                  width: size * 0.35,
-                  height: size * 1.25,
-                },
-              ]}
-            />
-          </View>
-        </Animated.View>
+        <>
+          {/* Main rotating beam with gradient sweep */}
+          <Animated.View
+            style={[
+              styles.beamContainer,
+              {
+                width: size * 2.8,
+                height: size * 2.8,
+                transform: [{ rotate }],
+              },
+            ]}
+          >
+            {/* Solid scan line from center */}
+            <Animated.View style={[styles.beamLine, { 
+              width: 2, 
+              height: size * 1.4,
+              backgroundColor: color,
+              opacity: scanOpacity,
+              shadowColor: color,
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.8,
+              shadowRadius: 8,
+            }]} />
+            
+            {/* Wide gradient sweep area (cone shape) */}
+            <View style={styles.beamWrapper}>
+              <LinearGradient
+                colors={[
+                  `${color}00`, // Transparent at edges
+                  `${color}10`,
+                  `${color}30`,
+                  `${color}50`,
+                  `${color}70`, // Brightest at scan line
+                  `${color}50`,
+                  `${color}30`,
+                  `${color}10`,
+                  `${color}00`, // Transparent at edges
+                ]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={[
+                  styles.beamGradient,
+                  {
+                    width: size * 1.4,
+                    height: size * 1.4,
+                  },
+                ]}
+              />
+            </View>
+
+            {/* Secondary faint sweep for depth */}
+            <View style={styles.beamWrapper}>
+              <LinearGradient
+                colors={[
+                  `${color}00`,
+                  `${color}05`,
+                  `${color}15`,
+                  `${color}25`,
+                  `${color}15`,
+                  `${color}05`,
+                  `${color}00`,
+                ]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={[
+                  styles.beamGradient,
+                  {
+                    width: size * 1.6,
+                    height: size * 1.6,
+                  },
+                ]}
+              />
+            </View>
+          </Animated.View>
+        </>
       )}
 
       {/* Glowing center dot */}
@@ -302,6 +416,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  innerCircle: {
+    position: 'absolute',
+    opacity: 0.6,
+  },
+  middleCircle: {
+    position: 'absolute',
+    opacity: 0.4,
+  },
+  outerRing: {
+    position: 'absolute',
+    opacity: 0.3,
+  },
   pulseRing: {
     position: 'absolute',
     shadowColor: '#1DB954',
@@ -315,10 +441,19 @@ const styles = StyleSheet.create({
   },
   beamContainer: {
     position: 'absolute',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
   },
+  beamLine: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginLeft: -1,
+    transformOrigin: 'top center',
+    elevation: 5,
+  },
   beamWrapper: {
+    position: 'absolute',
     width: '100%',
     height: '100%',
     justifyContent: 'center',
@@ -326,7 +461,7 @@ const styles = StyleSheet.create({
   },
   beamGradient: {
     position: 'absolute',
-    borderRadius: 2,
+    opacity: 0.6,
   },
   centerGlow: {
     position: 'absolute',
