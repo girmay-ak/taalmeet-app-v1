@@ -242,16 +242,14 @@ export async function getExpoPushToken(): Promise<string | null> {
     const isValidProjectId = projectId && uuidRegex.test(projectId);
 
     if (!isValidProjectId) {
-      // For development, try without projectId (legacy method)
-      // This works in Expo Go and development builds
-      try {
-        const tokenData = await Notifications.getExpoPushTokenAsync();
-        return tokenData.data;
-      } catch (legacyError) {
-        console.warn('Project ID not found or invalid. Push notifications require a valid EAS project ID for production. For development, you can use Expo Go or set up EAS project.');
-        console.warn('To set up EAS project: Run "eas init" or add a valid projectId to app.json extra.eas.projectId');
+      // Skip push token registration if no valid projectId
+      // To enable push notifications, run "eas init" or add a valid projectId to app.json extra.eas.projectId
+      if (__DEV__) {
+        // In development, silently skip push token registration if no projectId
         return null;
       }
+      // In production, we require a valid projectId
+      return null;
     }
 
     const tokenData = await Notifications.getExpoPushTokenAsync({
@@ -266,12 +264,12 @@ export async function getExpoPushToken(): Promise<string | null> {
 }
 
 /**
- * Get device platform
+ * Get device platform (mobile only)
  */
-function getDevicePlatform(): 'ios' | 'android' | 'web' {
+function getDevicePlatform(): 'ios' | 'android' {
   if (Platform.OS === 'ios') return 'ios';
   if (Platform.OS === 'android') return 'android';
-  return 'web';
+  throw new Error(`Unsupported platform: ${Platform.OS}. Only iOS and Android are supported.`);
 }
 
 /**

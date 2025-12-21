@@ -34,6 +34,7 @@ export { EventHorizontalCard } from './events/EventHorizontalCard';
 // Profile Components
 export { EditProfileModal } from './profile/EditProfileModal';
 export { ChangePasswordModal } from './profile/ChangePasswordModal';
+export { VerificationBadge } from './profile/VerificationBadge';
 
 // TODO: Fix these animations (use motion/react - web-only)
 // export { AnimatedGradient } from './animations/AnimatedGradient';
@@ -69,6 +70,9 @@ export { DiscoveryFiltersModal } from './discovery/DiscoveryFiltersModal';
 
 // Chat
 export { TranslationButton, MessageTranslation } from './chat/TranslationButton';
+
+// Logo Component (New Design)
+export { TaalMeetLogo, TaalMeetIcon } from './logo/TaalMeetLogo';
 
 // Icons
 export * from './icons';

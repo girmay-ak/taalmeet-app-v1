@@ -51,3 +51,9 @@ export * from './helpService';
 export * from './discoveryFilterService';
 export * from './translationService';
 export * from './groupsService';
+
+// Verification Service (ID & Face Recognition)
+export * from './verificationService';
+
+// Event Service (Language Exchange Events)
+export * from './eventService';

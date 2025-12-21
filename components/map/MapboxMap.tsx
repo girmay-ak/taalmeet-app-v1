@@ -7,7 +7,6 @@ import React, { useRef } from 'react';
 import { View, StyleSheet, Image, Text } from 'react-native';
 import { Mapbox } from '@/services/mapbox';
 import MapboxLib, { Camera, MapView, UserLocation, PointAnnotation } from '@rnmapbox/maps';
-import { RadarPulse } from './RadarPulse';
 
 // ============================================================================
 // TYPES
@@ -109,11 +108,11 @@ export function MapboxMap({
           }
         />
 
-        {/* User Location Indicator */}
+        {/* User Location Tracking (invisible, only for location updates) */}
         {showUserLocation && (
           <UserLocation
-            visible={true}
-            showsUserHeadingIndicator={true}
+            visible={false}
+            showsUserHeadingIndicator={false}
             androidRenderMode="normal"
             onUpdate={(location) => {
               if (location.coords && onUserLocationUpdate) {
@@ -126,32 +125,11 @@ export function MapboxMap({
           />
         )}
 
-        {/* Current user location marker with radar pulse (if userLocation provided) */}
-        {userLocation && (
-          <>
-            {/* Radar pulse */}
-            <PointAnnotation
-              id="current-user-radar"
-              coordinate={[userLocation.longitude, userLocation.latitude]}
-              anchor={{ x: 0.5, y: 0.5 }}
-            >
-              <View style={styles.radarContainer}>
-                <RadarPulse size={120} color="#ffd93d" rings={3} />
-              </View>
-            </PointAnnotation>
-            {/* User location marker */}
-            <PointAnnotation
-              id="current-user"
-              coordinate={[userLocation.longitude, userLocation.latitude]}
-            >
-              <View style={styles.currentUserMarker}>
-                <View style={styles.currentUserDot} />
-              </View>
-            </PointAnnotation>
-          </>
-        )}
+        {/* NOTE: Logged-in user is NOT rendered as a map marker.
+             It's rendered as a fixed overlay (CenterUserAvatar) in the parent component.
+             Radar pulse is also attached to that fixed overlay, not here. */}
 
-        {/* Other users (if provided via users prop) */}
+        {/* Other users (if provided via users prop - DEPRECATED, use children instead) */}
         {users.map((user) => (
           <PointAnnotation
             key={user.id}
@@ -194,33 +172,7 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  currentUserMarker: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#ffd93d',
-    borderWidth: 3,
-    borderColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  currentUserDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#ffffff',
-  },
-  radarContainer: {
-    width: 120,
-    height: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  // Legacy styles for deprecated users prop
   userMarker: {
     width: 56,
     height: 56,

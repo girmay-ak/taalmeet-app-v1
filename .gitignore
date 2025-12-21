@@ -50,3 +50,6 @@ expo-env.d.ts
 
 # Reference web version (for design reference only - not committed)
 reference-web-version/
+
+# UX Template (for design reference only - not committed)
+ux-template/

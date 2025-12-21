@@ -9,7 +9,8 @@ import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { GOOGLE_MAPS_API_KEY } from '@/lib/config';
 import type { NearbyUser } from '@/services/locationService';
 import { getLanguageFlag } from '@/utils/languageFlags';
-import { RadarPulse } from './RadarPulse';
+import { GoogleMapPinMarker } from './GoogleMapPinMarker';
+import { AnimatedMarkerWrapper } from './AnimatedMarkerWrapper';
 
 // ============================================================================
 // TYPES
@@ -48,6 +49,10 @@ export interface GoogleMapProps {
    * Map type: standard, satellite, or hybrid
    */
   mapType?: 'standard' | 'satellite' | 'hybrid';
+  /**
+   * Currently selected user ID
+   */
+  selectedUserId?: string | null;
 }
 
 // ============================================================================
@@ -61,6 +66,7 @@ export function GoogleMap({
   onUserLocationUpdate,
   zoomLevel = 13,
   mapType = 'standard',
+  selectedUserId = null,
 }: GoogleMapProps) {
   const mapRef = useRef<MapView>(null);
 
@@ -109,8 +115,8 @@ export function GoogleMap({
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         initialRegion={initialRegion}
-        showsUserLocation={true}
-        showsMyLocationButton={true}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
         showsCompass={true}
         mapType={mapType}
         onUserLocationChange={(e) => {
@@ -151,26 +157,16 @@ export function GoogleMap({
           },
         ]}
       >
-        {/* Radar pulse at user location */}
-        {userLocation && (
-          <Marker
-            coordinate={{
-              latitude: userLocation.latitude,
-              longitude: userLocation.longitude,
-            }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            tracksViewChanges={false}
-          >
-            <View style={styles.radarContainer}>
-              <RadarPulse size={120} color="#10B981" rings={3} />
-            </View>
-          </Marker>
-        )}
-
-        {/* User markers */}
+        {/* User markers - Pin style with flags and selection animations */}
         {users.map((user) => {
           const isOnline = user.isOnline ?? false;
           const teachingLang = getTeachingLanguage(user);
+          
+          // Determine border color based on status
+          const borderColor = isOnline ? '#07BD74' : '#9E9E9E';
+          
+          const isSelected = selectedUserId === user.id;
+          const isDimmed = selectedUserId !== null && selectedUserId !== user.id;
 
           return (
             <Marker
@@ -180,40 +176,19 @@ export function GoogleMap({
                 longitude: user.lng,
               }}
               onPress={() => onUserPress?.(user)}
-              title={user.displayName}
-              description={teachingLang}
+              anchor={{ x: 0.5, y: 1 }}
+              tracksViewChanges={false}
             >
-              <View style={styles.markerContainer}>
-                <View
-                  style={[
-                    styles.marker,
-                    {
-                      borderColor: isOnline ? '#10B981' : '#6B7280',
-                      borderWidth: isOnline ? 3 : 2,
-                    },
-                  ]}
-                >
-                  {user.avatarUrl ? (
-                    <Image
-                      source={{ uri: user.avatarUrl }}
-                      style={styles.avatarImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={[styles.avatarPlaceholder, { backgroundColor: '#6366f1' }]}>
-                      <Text style={styles.avatarInitial}>
-                        {user.displayName.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                {/* Language flag badge */}
-                <View style={styles.flagBadge}>
-                  <Text style={styles.flagText}>{teachingLang}</Text>
-                </View>
-                {/* Online indicator */}
-                {isOnline && <View style={styles.onlineIndicator} />}
-              </View>
+              <AnimatedMarkerWrapper isSelected={isSelected} isDimmed={isDimmed}>
+                <GoogleMapPinMarker
+                  avatarUrl={user.avatarUrl}
+                  size={56}
+                  isOnline={isOnline}
+                  borderColor={borderColor}
+                  displayName={user.displayName}
+                  languageFlag={teachingLang}
+                />
+              </AnimatedMarkerWrapper>
             </Marker>
           );
         })}
@@ -298,12 +273,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
     borderWidth: 2,
     borderColor: '#FFFFFF',
-  },
-  radarContainer: {
-    width: 120,
-    height: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });
 

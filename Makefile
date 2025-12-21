@@ -1,4 +1,4 @@
-.PHONY: install start ios android web lint format typecheck build-dev build-preview build-prod prebuild clean help
+.PHONY: install start ios android lint format typecheck build-dev build-preview build-prod prebuild clean help
 
 # Default target
 help:
@@ -8,7 +8,6 @@ help:
 	@echo "  make start         - Start Expo development server (use with Expo Go)"
 	@echo "  make ios           - Run on iOS simulator"
 	@echo "  make android       - Run on Android emulator (requires Android SDK)"
-	@echo "  make web           - Run on web browser"
 	@echo "  make lint          - Run ESLint"
 	@echo "  make lint-fix      - Fix ESLint errors"
 	@echo "  make format        - Format code with Prettier"
@@ -69,9 +68,6 @@ android:
 	fi
 	@echo "✅ Android SDK found at $$ANDROID_HOME"
 	npx expo run:android
-
-web:
-	npx expo start --web
 
 # Code quality
 lint:

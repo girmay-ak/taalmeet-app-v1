@@ -62,3 +62,9 @@ export * from './useTranslation';
 
 // Groups Hooks
 export * from './useGroups';
+
+// Verification Hooks (ID & Face Recognition)
+export * from './useVerification';
+
+// Event Hooks (Language Exchange Events)
+export * from './useEvents';
